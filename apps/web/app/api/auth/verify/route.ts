@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { signAuthToken, verifyWalletSignature } from "@evidex/auth";
 import { getRedisClient } from "@evidex/api/cache";
+import { assertRateLimit } from "@evidex/api/rate-limit";
 import { getOrCreateUser } from "@evidex/database";
 
 export const runtime = "nodejs";
@@ -17,6 +18,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = bodySchema.parse(await request.json());
     const walletAddress = body.walletAddress.toLowerCase();
+
+    await assertRateLimit({
+      key: `auth:verify:${request.ip ?? walletAddress}`,
+      limit: 10,
+      windowSeconds: 60
+    });
 
     const redis = getRedisClient();
     const expectedNonce = await redis.get(`auth:nonce:${walletAddress}`);

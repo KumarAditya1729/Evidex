@@ -13,7 +13,7 @@ export async function getOrCreateUser(walletAddress: string) {
 
   return prisma.user.upsert({
     where: { walletAddress: normalized },
-    update: role === Role.ADMIN ? { role: Role.ADMIN } : {},
+    update: {},   // never overwrite role on login — only set at creation
     create: {
       walletAddress: normalized,
       role
@@ -70,6 +70,12 @@ export async function registerUserCredentials(input: {
         role: roleForWallet
       }
     });
+  }).catch((error) => {
+    // Catch unique constraint violations for name/wallet instead of racing with select queries
+    if (error.code === "P2002") {
+      throw new Error("Username or wallet is already in use.");
+    }
+    throw error;
   });
 }
 
@@ -114,12 +120,14 @@ export async function createEvidenceRecord(input: {
   });
 }
 
-export async function findEvidenceByHash(hash: string, chain: Chain) {
+export async function findEvidenceByHash(hash: string, chain: Chain, userId?: string) {
   return prisma.evidence.findFirst({
     where: {
       sha256Hash: hash,
-      chain
+      chain,
+      ...(userId ? { userId } : {})
     },
+
     include: {
       user: true,
       anchors: true
@@ -127,7 +135,10 @@ export async function findEvidenceByHash(hash: string, chain: Chain) {
   });
 }
 
-export async function listEvidenceByUser(walletAddress: string) {
+export async function listEvidenceByUser(walletAddress: string, options?: { limit?: number; offset?: number }) {
+  const limit = Math.min(options?.limit ?? 50, 100);
+  const skip = Math.max(options?.offset ?? 0, 0);
+
   return prisma.evidence.findMany({
     where: {
       user: {
@@ -139,7 +150,9 @@ export async function listEvidenceByUser(walletAddress: string) {
     },
     orderBy: {
       createdAt: "desc"
-    }
+    },
+    take: limit,
+    skip
   });
 }
 
@@ -154,15 +167,15 @@ export async function getEvidenceById(id: string) {
 }
 
 export async function listExplorerEvidence(input?: { limit?: number; role?: Role }) {
-  const limit = input?.limit ?? 100;
+  const limit = Math.min(input?.limit ?? 50, 100); // hard cap — never exceed 100
 
   return prisma.evidence.findMany({
     where: input?.role
       ? {
-          user: {
-            role: input.role
-          }
+        user: {
+          role: input.role
         }
+      }
       : undefined,
     include: {
       user: true,
@@ -195,38 +208,29 @@ export async function createVerificationLog(input: {
   });
 }
 
-export async function getAdminStats() {
+// Private compute logic without caching concerns
+async function computeAdminStats() {
   const adminWalletAddress = process.env.ADMIN_WALLET_ADDRESS?.toLowerCase();
-  
-  const [userCount, evidenceCount, verifiedCount, failedCount, latestEvidences, myEvidences] = await Promise.all([
+
+  const [userCount, evidenceCount, verifiedCount, failedCount, latestEvidences, myEvidences] = await prisma.$transaction([
     prisma.user.count(),
     prisma.evidence.count(),
-    prisma.verificationLog.count({
-      where: {
-        result: true
-      }
-    }),
-    prisma.verificationLog.count({
-      where: {
-        result: false
-      }
-    }),
+    // Use the correct schema properties for verificationLog
+    prisma.verificationLog.count({ where: { result: true } }),
+    prisma.verificationLog.count({ where: { result: false } }),
     prisma.evidence.findMany({
       orderBy: { createdAt: "desc" },
       take: 10,
       include: { user: true }
     }),
-    // Only your blocks
-    adminWalletAddress ? prisma.evidence.findMany({
-      where: {
-        user: {
-          walletAddress: adminWalletAddress
-        }
-      },
-      include: { user: true },
-      orderBy: { createdAt: "desc" },
-      take: 20
-    }) : Promise.resolve([])
+    adminWalletAddress
+      ? prisma.evidence.findMany({
+          where: { user: { walletAddress: adminWalletAddress } },
+          include: { user: true },
+          orderBy: { createdAt: "desc" },
+          take: 20
+        })
+      : prisma.evidence.findMany({ take: 0 })
   ]);
 
   return {
@@ -235,7 +239,7 @@ export async function getAdminStats() {
     verifiedCount,
     failedCount,
     latestEvidences,
-    myEvidences, // Your blocks only
+    myEvidences,
     adminWallet: adminWalletAddress
   };
 }

@@ -10,12 +10,12 @@ export async function assertRateLimit(input: {
 
   const tx = redis.multi();
   tx.incr(redisKey);
-  tx.expire(redisKey, input.windowSeconds, "NX");
+  tx.expire(redisKey, input.windowSeconds, "NX"); // set TTL only on first request (fixed window)
 
   const results = await tx.exec();
   const count = Number(results?.[0]?.[1] ?? 0);
 
-  if (count > input.limit) {
+  if (count >= input.limit) {
     throw new Error("Rate limit exceeded. Please try again later.");
   }
 }

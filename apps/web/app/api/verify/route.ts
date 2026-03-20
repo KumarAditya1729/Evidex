@@ -17,6 +17,9 @@ export async function POST(request: NextRequest) {
 
     let content: Buffer | undefined;
     if (file instanceof File) {
+      if (file.size > 100 * 1024 * 1024) {
+        return NextResponse.json({ error: "Max file size is 100MB." }, { status: 413 });
+      }
       content = Buffer.from(await file.arrayBuffer());
     }
 

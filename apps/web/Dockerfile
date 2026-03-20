@@ -11,6 +11,11 @@ COPY packages/blockchain/package.json packages/blockchain/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/storage/package.json packages/storage/package.json
 COPY contracts/package.json contracts/package.json
+COPY packages/database/prisma packages/database/prisma
+
+# Add build tools required for node-gyp to compile native C++ addons (bufferutil, utf-8-validate)
+RUN apk add --no-cache python3 make g++ openssl
+
 RUN pnpm install --frozen-lockfile=false
 
 FROM base AS builder

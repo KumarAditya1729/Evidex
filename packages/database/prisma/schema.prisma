@@ -45,7 +45,7 @@ model Evidence {
   originalFilename String
   mimeType         String
   sizeBytes        BigInt
-  sha256Hash       String            @unique
+  sha256Hash       String            
   ipfsCID          String
   chain            Chain
   chainTxHash      String
@@ -60,6 +60,8 @@ model Evidence {
 
   @@index([userId, createdAt])
   @@index([chain, chainTxHash])
+  @@index([sha256Hash, chain])        // for unauthenticated verify lookups
+  @@unique([sha256Hash, chain, userId])
 }
 
 model Anchor {

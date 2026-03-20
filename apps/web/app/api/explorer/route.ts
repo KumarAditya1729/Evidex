@@ -1,17 +1,24 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Role, listExplorerEvidence } from "@evidex/database";
 import { createBlockchainServiceFromEnv } from "@evidex/blockchain";
 import { parseChain } from "@evidex/api/chains";
 import { serializeForJson } from "@/lib/serializers";
+import { getSessionFromRequest } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    // Require authentication — evidence index must not be public
+    const session = await getSessionFromRequest(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const url = new URL(request.url);
     const roleParam = url.searchParams.get("role");
-    const limitParam = Number(url.searchParams.get("limit") ?? 200);
+    const limitParam = Number(url.searchParams.get("limit") ?? 50);
     const includeChain = url.searchParams.get("includeChain") === "true";
     const format = url.searchParams.get("format");
 
@@ -19,7 +26,7 @@ export async function GET(request: Request) {
       roleParam === Role.ADMIN ? Role.ADMIN : roleParam === Role.USER ? Role.USER : undefined;
 
     const evidence = await listExplorerEvidence({
-      limit: Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 200,
+      limit: Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 50, // cap at 100
       role
     });
 

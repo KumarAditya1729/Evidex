@@ -64,7 +64,10 @@ export async function createEnhancedBlockchainServiceFromEnv(): Promise<Enhanced
     return enhancedBlockchainServicePromise;
   }
 
-  enhancedBlockchainServicePromise = buildEnhancedBlockchainServiceFromEnv();
+  enhancedBlockchainServicePromise = buildEnhancedBlockchainServiceFromEnv().catch(err => {
+    enhancedBlockchainServicePromise = null; // clear so next call retries
+    throw err;
+  });
   return enhancedBlockchainServicePromise;
 }
 
@@ -73,29 +76,51 @@ async function buildEnhancedBlockchainServiceFromEnv(): Promise<EnhancedBlockcha
 
   // 🟢 ETHEREUM CONFIGURATION
   const ethereumRpcUrl = process.env.ETHEREUM_RPC_URL;
-  const ethereumPrivateKey = process.env.ETHEREUM_PRIVATE_KEY;
+  let ethereumPrivateKey = process.env.ETHEREUM_PRIVATE_KEY;
+  
+  if (!ethereumPrivateKey && process.env.ETH_KEYSTORE_PATH && process.env.ETH_KEYSTORE_PASSWORD) {
+    const { Wallet } = await import("ethers");
+    const { readFileSync } = await import("fs");
+    const json = readFileSync(process.env.ETH_KEYSTORE_PATH, "utf8");
+    const wallet = Wallet.fromEncryptedJsonSync(json, process.env.ETH_KEYSTORE_PASSWORD);
+    ethereumPrivateKey = wallet.privateKey;
+  }
+
   if (ethereumRpcUrl && ethereumPrivateKey) {
+    const contractAddress = process.env.ETHEREUM_CONTRACT_ADDRESS;
+    if (!contractAddress) throw new Error("ETHEREUM_CONTRACT_ADDRESS is required when ETHEREUM_RPC_URL is set.");
     const { EvmEvidenceAdapter } = await import("./adapters/evm.adapter");
     adapters.ethereum = new EvmEvidenceAdapter({
       chain: "ethereum",
       rpcUrl: ethereumRpcUrl,
-      contractAddress: process.env.ETHEREUM_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000000",
+      contractAddress,
       privateKey: ethereumPrivateKey,
-      explorerBaseUrl: "https://etherscan.io/tx/"
+      explorerBaseUrl: process.env.ETHEREUM_EXPLORER_BASE_URL ?? "https://etherscan.io/tx/"
     });
   }
 
   // 🟣 POLYGON CONFIGURATION
   const polygonRpcUrl = process.env.POLYGON_RPC_URL;
-  const polygonPrivateKey = process.env.POLYGON_PRIVATE_KEY;
+  let polygonPrivateKey = process.env.POLYGON_PRIVATE_KEY;
+
+  if (!polygonPrivateKey && process.env.POLY_KEYSTORE_PATH && process.env.POLY_KEYSTORE_PASSWORD) {
+    const { Wallet } = await import("ethers");
+    const { readFileSync } = await import("fs");
+    const json = readFileSync(process.env.POLY_KEYSTORE_PATH, "utf8");
+    const wallet = Wallet.fromEncryptedJsonSync(json, process.env.POLY_KEYSTORE_PASSWORD);
+    polygonPrivateKey = wallet.privateKey;
+  }
+
   if (polygonRpcUrl && polygonPrivateKey) {
+    const contractAddress = process.env.POLYGON_CONTRACT_ADDRESS;
+    if (!contractAddress) throw new Error("POLYGON_CONTRACT_ADDRESS is required when POLYGON_RPC_URL is set.");
     const { EvmEvidenceAdapter } = await import("./adapters/evm.adapter");
     adapters.polygon = new EvmEvidenceAdapter({
       chain: "polygon",
       rpcUrl: polygonRpcUrl,
-      contractAddress: process.env.POLYGON_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000000",
+      contractAddress,
       privateKey: polygonPrivateKey,
-      explorerBaseUrl: "https://polygonscan.com/tx/"
+      explorerBaseUrl: process.env.POLYGON_EXPLORER_BASE_URL ?? "https://polygonscan.com/tx/"
     });
   }
 

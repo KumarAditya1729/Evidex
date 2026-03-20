@@ -1,25 +1,68 @@
+import { verifyAuthToken } from "@evidex/auth";
 import { NextRequest, NextResponse } from "next/server";
 
 const protectedPrefixes = ["/dashboard", "/upload", "/settings", "/admin", "/evidence"];
 
-export function middleware(request: NextRequest) {
+function addCorsHeaders(res: NextResponse) {
+  const allowedOrigin = process.env.ALLOWED_ORIGINS || "*";
+  res.headers.set("Access-Control-Allow-Origin", allowedOrigin);
+  res.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return res;
+}
+
+export async function middleware(request: NextRequest) {
+  // Handle CORS Preflight
+  if (request.method === "OPTIONS") {
+    return addCorsHeaders(new NextResponse(null, { status: 204 }));
+  }
+
   const { pathname } = request.nextUrl;
+  const isApi = pathname.startsWith("/api/");
   const requiresAuth = protectedPrefixes.some((prefix) => pathname.startsWith(prefix));
 
   if (!requiresAuth) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    return addCorsHeaders(res);
   }
 
   const token = request.cookies.get("evidex_token")?.value;
+  
+  const handleUnauthorized = () => {
+    if (isApi) {
+      const res = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      res.cookies.delete("evidex_token");
+      return addCorsHeaders(res);
+    } else {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      const res = NextResponse.redirect(url);
+      res.cookies.delete("evidex_token");
+      return addCorsHeaders(res);
+    }
+  };
+
   if (!token) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    return NextResponse.redirect(url);
+    return handleUnauthorized();
   }
 
-  return NextResponse.next();
+  try {
+    const payload = await verifyAuthToken(token);
+    if (!payload) throw new Error("Invalid token");
+    const res = NextResponse.next();
+    return addCorsHeaders(res);
+  } catch {
+    return handleUnauthorized();
+  }
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/upload/:path*", "/settings/:path*", "/admin/:path*", "/evidence/:path*"]
+  matcher: [
+    "/api/:path*", 
+    "/dashboard/:path*", 
+    "/upload/:path*", 
+    "/settings/:path*", 
+    "/admin/:path*", 
+    "/evidence/:path*"
+  ]
 };

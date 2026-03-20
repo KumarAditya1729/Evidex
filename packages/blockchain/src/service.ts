@@ -64,7 +64,10 @@ export async function createBlockchainServiceFromEnv(): Promise<BlockchainServic
     return blockchainServicePromise;
   }
 
-  blockchainServicePromise = buildBlockchainServiceFromEnv();
+  blockchainServicePromise = buildBlockchainServiceFromEnv().catch(err => {
+    blockchainServicePromise = null; // clear so next call retries
+    throw err;
+  });
   return blockchainServicePromise;
 }
 

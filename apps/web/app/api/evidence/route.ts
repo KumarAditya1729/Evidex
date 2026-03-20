@@ -14,11 +14,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const evidences = await listEvidenceByUser(session.walletAddress);
+  const url = new URL(request.url);
+  const limit = Number(url.searchParams.get("limit") ?? 50);
+  const offset = Number(url.searchParams.get("offset") ?? 0);
+
+  const evidences = await listEvidenceByUser(session.walletAddress.toLowerCase(), { limit, offset });
   return NextResponse.json({
     evidences: serializeForJson({ evidences }).evidences
   });
 }
+
+import { pipeline } from "stream/promises";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import crypto from "crypto";
+import { Readable, Transform } from "stream";
 
 export async function POST(request: NextRequest) {
   const session = await getSessionFromRequest(request);
@@ -26,27 +37,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const formData = await request.formData();
+  const file = formData.get("file");
+  const chain = PRIMARY_CHAIN;
+
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "File is required." }, { status: 400 });
+  }
+
+  if (file.size > 100 * 1024 * 1024) {
+    return NextResponse.json({ error: "Max file size is 100MB." }, { status: 413 });
+  }
+
+  const tmpPath = path.join(os.tmpdir(), `evidex_std_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+  
   try {
-    const formData = await request.formData();
-    const file = formData.get("file");
-    const chain = PRIMARY_CHAIN;
+    const hashStream = crypto.createHash("sha256");
+    const hashTransformer = new Transform({
+      transform(chunk, encoding, callback) {
+        hashStream.update(chunk);
+        callback(null, chunk);
+      }
+    });
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "File is required." }, { status: 400 });
-    }
-
-    if (file.size > 100 * 1024 * 1024) {
-      return NextResponse.json({ error: "Max file size is 100MB." }, { status: 413 });
-    }
-
-    const content = Buffer.from(await file.arrayBuffer());
+    const nodeStream = Readable.fromWeb(file.stream() as any);
+    await pipeline(nodeStream, hashTransformer, fs.createWriteStream(tmpPath));
+    const hashHex = hashStream.digest("hex");
 
     const result = await processEvidenceUpload({
       walletAddress: session.walletAddress,
       chain,
       filename: file.name,
       mimeType: file.type || "application/octet-stream",
-      content
+      filePath: tmpPath,
+      hash: hashHex
     });
 
     return NextResponse.json(serializeForJson(result));
@@ -55,5 +79,7 @@ export async function POST(request: NextRequest) {
       { error: error instanceof Error ? error.message : "Evidence upload failed." },
       { status: 400 }
     );
+  } finally {
+    await fs.promises.unlink(tmpPath).catch(() => {});
   }
 }

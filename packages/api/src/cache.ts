@@ -21,6 +21,12 @@ export function getRedisClient(): Redis {
     enableReadyCheck: true
   });
 
+  // Prevent unhandled 'error' event from crashing the process
+  client.on("error", (err) => {
+    console.error("[Redis] Connection error:", err);
+    globalThis.__evidexRedis = undefined; // allow reconnect on next call
+  });
+
   globalThis.__evidexRedis = client;
   return client;
 }

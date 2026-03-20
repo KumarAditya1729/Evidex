@@ -18,7 +18,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Admin wallet not configured" }, { status: 500 });
   }
 
-  const evidences = await listEvidenceByUser(adminWalletAddress);
+  const url = new URL(request.url);
+  const limit = Number(url.searchParams.get("limit") ?? 50);
+  const offset = Number(url.searchParams.get("offset") ?? 0);
+
+  const evidences = await listEvidenceByUser(adminWalletAddress, { limit, offset });
   return NextResponse.json({
     evidences: serializeForJson({ evidences }).evidences,
     adminWallet: adminWalletAddress

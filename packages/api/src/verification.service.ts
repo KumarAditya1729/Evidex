@@ -3,7 +3,7 @@ import { createBlockchainServiceFromEnv } from "@evidex/blockchain";
 import {
   createVerificationLog,
   findEvidenceByHash,
-  getOrCreateUser,
+  prisma,
   type Prisma
 } from "@evidex/database";
 import { assertRateLimit } from "./rate-limit";
@@ -47,8 +47,11 @@ export async function verifyEvidence(inputRaw: z.input<typeof verifyInputSchema>
 
   let userId: string | undefined;
   if (input.walletAddress) {
-    const user = await getOrCreateUser(input.walletAddress);
-    userId = user.id;
+    // Only link to an existing user — never create ghost records for anonymous verifiers
+    const existingUser = await prisma.user.findFirst({
+      where: { walletAddress: input.walletAddress.toLowerCase() }
+    });
+    userId = existingUser?.id;
   }
 
   await createVerificationLog({
