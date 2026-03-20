@@ -208,8 +208,8 @@ export async function createVerificationLog(input: {
   });
 }
 
-// Private compute logic without caching concerns
-async function computeAdminStats() {
+// Public compute logic for Admin statistics
+export async function getAdminStats() {
   const adminWalletAddress = process.env.ADMIN_WALLET_ADDRESS?.toLowerCase();
 
   const [userCount, evidenceCount, verifiedCount, failedCount, latestEvidences, myEvidences] = await prisma.$transaction([
