@@ -2,7 +2,7 @@
   "name": "evidex-evidence-platform",
   "version": "0.1.1",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "./scripts/dev-web.sh",
     "start": "./scripts/run-web.sh",
