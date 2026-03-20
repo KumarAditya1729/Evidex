@@ -94,5 +94,3 @@ Use wallet: `0x7014B1Ed9825905Ce8FD0D8744896Eab2C6DB6F3`
 **🎉 EVIDEX: Universal Multi-Chain Evidence Anchoring Platform**
 
 *Built with ❤️ for KIIT Computer Engineering Project*
-# Evidex
-# Evidex

@@ -1,0 +1,148 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+pub mod types;
+
+use frame_support::pallet_prelude::*;
+use frame_system::pallet_prelude::*;
+use sp_std::prelude::*;
+use sp_runtime::traits::Hash;
+use frame_support::traits::Currency;
+use crate::types::EvidenceStatus;
+
+pub use pallet::*;
+
+#[frame_support::pallet]
+pub mod pallet {
+    use super::*;
+
+    /// Configure the pallet.
+    #[pallet::config]
+    pub trait Config: frame_system::Config {
+        /// Because this pallet emits events, it depends on the runtime's definition of an event.
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        
+        /// Maximum length of evidence hash
+        #[pallet::constant]
+        type MaxHashLength: Get<u32>;
+        
+        /// Maximum size of metadata
+        #[pallet::constant]
+        type MaxMetadataSize: Get<u32>;
+        
+        /// Maximum number of tags per evidence
+        #[pallet::constant]
+        type MaxTagsPerEvidence: Get<u32>;
+        
+        /// Evidence submission fee
+        #[pallet::constant]
+        type SubmissionFee: Get<<<Self as pallet::Config>::Currency as frame_support::traits::Currency<<Self as frame_system::Config>::AccountId>>::Balance>;
+        
+        /// Currency type for fee handling
+        type Currency: Currency<<Self as frame_system::Config>::AccountId>;
+        
+        /// Admin key that can manage evidence
+        type AdminKey: Get<<Self as frame_system::Config>::AccountId>;
+    }
+
+    #[pallet::pallet]
+    pub struct Pallet<T>(_);
+
+    // Storage for evidence records - simplified to avoid MaxEncodedLen issues
+    #[pallet::storage]
+    #[pallet::getter(fn evidences)]
+    pub type Evidences<T> = StorageMap<
+        _,
+        Blake2_128Concat,
+        <T as frame_system::Config>::Hash,
+        <T as frame_system::Config>::AccountId, // Simplified to just store the owner
+    >;
+
+    // Pallet events
+    #[pallet::event]
+    #[pallet::generate_deposit(pub(super) fn deposit_event)]
+    pub enum Event<T: Config> {
+        /// Evidence submitted by user
+        EvidenceSubmitted {
+            owner: <T as frame_system::Config>::AccountId,
+            evidence_id: <T as frame_system::Config>::Hash,
+            file_hash: Vec<u8>,
+            ipfs_cid: Vec<u8>,
+        },
+        /// Evidence verified
+        EvidenceVerified {
+            evidence_id: <T as frame_system::Config>::Hash,
+            verifier: <T as frame_system::Config>::AccountId,
+        },
+    }
+
+    // Errors inform users that something went wrong.
+    #[pallet::error]
+    pub enum Error<T> {
+        /// Evidence already exists
+        EvidenceAlreadyExists,
+        /// Evidence not found
+        EvidenceNotFound,
+        /// Invalid hash format
+        InvalidHash,
+        /// Hash length exceeds maximum
+        HashTooLong,
+        /// Insufficient balance for submission fee
+        InsufficientBalance,
+        /// Not authorized to perform action
+        Unauthorized,
+    }
+
+    #[pallet::hooks]
+    impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
+
+    // Dispatchable functions allows users to interact with the pallet.
+    #[pallet::call]
+    impl<T: Config> Pallet<T> {
+        /// Submit new evidence to blockchain
+        #[pallet::weight(10_000)]
+        pub fn submit_evidence(
+            origin: OriginFor<T>,
+            file_hash: Vec<u8>,
+            ipfs_cid: Vec<u8>,
+        ) -> DispatchResult {
+            let sender = ensure_signed(origin)?;
+
+            // Validate hash length
+            ensure!(
+                file_hash.len() as u32 <= T::MaxHashLength::get(),
+                Error::<T>::HashTooLong
+            );
+
+            // Validate hash format (basic hex validation)
+            ensure!(
+                file_hash.iter().all(|c| c.is_ascii_hexdigit()),
+                Error::<T>::InvalidHash
+            );
+
+            // Validate IPFS CID
+            ensure!(!ipfs_cid.is_empty(), Error::<T>::InvalidHash);
+
+            // Generate evidence ID from hash
+            let evidence_id = Hashing::hash(&file_hash);
+
+            // Check if evidence already exists
+            ensure!(
+                !Evidences::<T>::contains_key(evidence_id),
+                Error::<T>::EvidenceAlreadyExists
+            );
+
+            // Store evidence (simplified)
+            Evidences::<T>::insert(evidence_id, sender.clone());
+
+            // Emit event
+            Self::deposit_event(Event::EvidenceSubmitted {
+                owner: sender,
+                evidence_id,
+                file_hash,
+                ipfs_cid,
+            });
+
+            Ok(())
+        }
+    }
+}

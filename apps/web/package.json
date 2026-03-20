@@ -1,0 +1,39 @@
+{
+  "name": "@evidex/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "echo 'No tests configured yet'",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@evidex/api": "workspace:*",
+    "@evidex/auth": "workspace:*",
+    "@evidex/database": "workspace:*",
+    "@evidex/storage": "workspace:*",
+    "@tanstack/react-query": "^5.62.7",
+    "clsx": "^2.1.1",
+    "next": "14.2.20",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "viem": "^2.21.20",
+    "wagmi": "^2.12.36",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.2.20",
+    "postcss": "^8.4.49",
+    "prettier": "^3.4.2",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.6.3"
+  }
+}

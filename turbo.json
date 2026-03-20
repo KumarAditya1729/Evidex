@@ -1,0 +1,41 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_ETHEREUM_RPC_URL",
+    "NEXT_PUBLIC_POLYGON_RPC_URL",
+    "JWT_SECRET",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "RABBITMQ_URL",
+    "PINATA_JWT",
+    "POLKADOT_WS_URL",
+    "POLKADOT_MNEMONIC",
+    "POLKADOT_SCAN_API_URL",
+    "POLKADOT_EXPLORER_BASE_URL",
+    "POLKADOT_REMARK_PREFIX",
+    "SUBSCAN_API_KEY",
+    "ADMIN_WALLET_ADDRESS"
+  ],
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "build/**", "artifacts/**", "cache/**"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "test": {
+      "dependsOn": ["^test"],
+      "outputs": ["coverage/**"]
+    },
+    "format": {
+      "outputs": []
+    }
+  }
+}

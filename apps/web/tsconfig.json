@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [{ "name": "next" }],
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
+    "incremental": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./*"],
+      "@evidex/api": ["../../packages/api/src"],
+      "@evidex/api/*": ["../../packages/api/src/*"],
+      "@evidex/auth": ["../../packages/auth/src"],
+      "@evidex/auth/*": ["../../packages/auth/src/*"],
+      "@evidex/database": ["../../packages/database/src"],
+      "@evidex/database/*": ["../../packages/database/src/*"],
+      "@evidex/blockchain": ["../../packages/blockchain/src"],
+      "@evidex/blockchain/*": ["../../packages/blockchain/src/*"],
+      "@evidex/storage": ["../../packages/storage/src"],
+      "@evidex/storage/*": ["../../packages/storage/src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
