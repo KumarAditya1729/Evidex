@@ -1,0 +1,166 @@
+version: '3.8'
+
+services:
+  # Relay Chain (Polkadot)
+  relay-chain-alice:
+    image: parity/polkadot:v1.0.0
+    container_name: evidex-relay-alice
+    ports:
+      - "30333:30333"
+      - "9933:9933"
+      - "9615:9615"
+    command: >
+      polkadot
+      --chain polkadot-local
+      --alice
+      --node-key 0000000000000000000000000000000000000000000000000000000000000001
+      --unsafe-ws-external
+      --unsafe-rpc-external
+      --rpc-cors all
+      --rpc-methods=unsafe
+      --prometheus-external
+      --validator
+      --out-peers 0
+      --in-peers 0
+    volumes:
+      - relay-alice-data:/data
+    networks:
+      - evidex-network
+
+  relay-chain-bob:
+    image: parity/polkadot:v1.0.0
+    container_name: evidex-relay-bob
+    ports:
+      - "30334:30333"
+      - "9944:9933"
+    command: >
+      polkadot
+      --chain polkadot-local
+      --bob
+      --unsafe-ws-external
+      --unsafe-rpc-external
+      --rpc-cors all
+      --rpc-methods=unsafe
+      --validator
+      --out-peers 0
+      --in-peers 0
+      --boot-nodes /ip4/relay-chain-alice/tcp/30333/p2p/12D3KooWExampleBootNode1
+    volumes:
+      - relay-bob-data:/data
+    networks:
+      - evidex-network
+
+  # Evidex Parachain Collator 1
+  evidex-collator-1:
+    image: evidex/parachain:latest
+    container_name: evidex-collator-1
+    ports:
+      - "30335:30333"
+      - "9955:9933"
+      - "4033:4033"
+    build:
+      context: ./parachain
+      dockerfile: Dockerfile
+    command: >
+      /usr/local/bin/evidex-parachain
+      --chain /chainspec/evidex-parachain.json
+      --collator
+      --alice
+      --unsafe-ws-external
+      --unsafe-rpc-external
+      --rpc-cors all
+      --rpc-methods=unsafe
+      --prometheus-external
+      --out-peers 0
+      --in-peers 0
+      --relay-chain-rpc-urls ws://relay-chain-alice:9944
+      --parachain-id 2000
+    volumes:
+      - ./parachain/chainspec:/chainspec:ro
+      - collator-1-data:/data
+    networks:
+      - evidex-network
+    depends_on:
+      - relay-chain-alice
+      - relay-chain-bob
+
+  # Evidex Parachain Collator 2
+  evidex-collator-2:
+    image: evidex/parachain:latest
+    container_name: evidex-collator-2
+    ports:
+      - "30336:30333"
+      - "9966:9933"
+    command: >
+      /usr/local/bin/evidex-parachain
+      --chain /chainspec/evidex-parachain.json
+      --collator
+      --bob
+      --unsafe-ws-external
+      --unsafe-rpc-external
+      --rpc-cors all
+      --rpc-methods=unsafe
+      --out-peers 0
+      --in-peers 0
+      --relay-chain-rpc-urls ws://relay-chain-alice:9944
+      --parachain-id 2000
+      --boot-nodes /ip4/evidex-collator-1/tcp/30333/p2p/12D3KooWExampleBootNode3
+    volumes:
+      - ./parachain/chainspec:/chainspec:ro
+      - collator-2-data:/data
+    networks:
+      - evidex-network
+    depends_on:
+      - evidex-collator-1
+
+  # Subscan Explorer (Optional)
+  subscan:
+    image: subscan/subscan:latest
+    container_name: evidex-subscan
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgresql://subscan:subscan@postgres:5432/subscan
+      - REDIS_URL=redis://redis:6379
+      - CHAIN_NAME=evidex
+      - CHAIN_WS_URL=ws://evidex-collator-1:9933
+    networks:
+      - evidex-network
+    depends_on:
+      - postgres
+      - redis
+      - evidex-collator-1
+
+  # PostgreSQL for Subscan
+  postgres:
+    image: postgres:15
+    container_name: evidex-postgres
+    environment:
+      - POSTGRES_USER=subscan
+      - POSTGRES_PASSWORD=subscan
+      - POSTGRES_DB=subscan
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - evidex-network
+
+  # Redis for Subscan
+  redis:
+    image: redis:7-alpine
+    container_name: evidex-redis
+    volumes:
+      - redis-data:/data
+    networks:
+      - evidex-network
+
+volumes:
+  relay-alice-data:
+  relay-bob-data:
+  collator-1-data:
+  collator-2-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  evidex-network:
+    driver: bridge

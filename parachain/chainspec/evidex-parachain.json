@@ -1,0 +1,57 @@
+{
+  "name": "Evidex Parachain",
+  "id": "evidex",
+  "chainType": "Parachain",
+  "bootNodes": [
+    "/ip4/127.0.0.1/tcp/30333/p2p/12D3KooWExampleBootNode1",
+    "/ip4/127.0.0.1/tcp/30334/p2p/12D3KooWExampleBootNode2"
+  ],
+  "telemetryEndpoints": [
+    "wss://telemetry.polkadot.io/submit/"
+  ],
+  "protocolId": "evidex-parachain",
+  "properties": {
+    "ss58Format": 42,
+    "tokenDecimals": 12,
+    "tokenSymbol": "EVID"
+  },
+  "genesis": {
+    "runtime": {
+      "system": {
+        "code": "0x3a636f6d706163742d686561702d747261696c6572"
+      },
+      "balances": {
+        "balances": [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            "1000000000000000000000"
+          ],
+          [
+            "5FHneW46xGXgs5mUiveU4sbTyGBzstJAzy1baAKQgwF4wQ5y",
+            "1000000000000000000000"
+          ]
+        ]
+      },
+      "sudo": {
+        "key": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+      },
+      "evidence": {
+        "adminKey": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+        "evidenceRegistry": {},
+        "verificationFee": "1000000000000"
+      },
+      "parachainInfo": {
+        "parachainId": 2000
+      },
+      "polkadotXcm": {
+        "safeXcmVersion": 2
+      }
+    }
+  },
+  "parachain": {
+    "id": 2000,
+    "chainType": "Parachain",
+    "relayChain": "polkadot",
+    "cumulusBased": true
+  }
+}

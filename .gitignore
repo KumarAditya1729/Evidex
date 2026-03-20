@@ -1,0 +1,137 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+
+# Environment files (NEVER COMMIT THESE)
+.env
+.env.local
+.env.production
+.env.production-ready
+.env.backup.*
+.env.demo
+.env.additional
+.env.all-chains.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.test
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next/
+
+# Production build files
+apps/web/.next/
+apps/web/out/
+apps/web/build/
+
+# Turbo cache
+.turbo/
+.turbo_stale_*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Database
+*.sqlite
+*.db
+
+# Temporary files
+tmp/
+temp/
+
+# Parachain build files
+parachain/target/
+parachain/.cargo/
+parachain/.rustup/
+
+# All Rust/Cargo build artifacts
+**/target/
+**/*.d
+**/*.rlib
+**/*.so
+**/*.dylib
+**/*.dll
+
+# Incremental compilation
+**/incremental/
+
+# Rust metadata
+**/*.rmeta
+
+# Rust lock files
+Cargo.lock
+
+# Cache files
+**/cache/
+
+# Package manager files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Build artifacts
+**/node_modules/
+**/dist/
+**/build/
+**/out/
+.vercel
+.env*.local

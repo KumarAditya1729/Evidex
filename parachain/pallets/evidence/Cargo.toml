@@ -1,0 +1,14 @@
+[package]
+name = "evidence-pallet"
+version = "0.1.0"
+authors = ["Evidex Team"]
+edition = "2021"
+description = "Pallet for digital evidence management on blockchain"
+
+[dependencies]
+pallet-evidence = { path = "../pallet-evidence", default-features = false }
+
+[features]
+default = ["std"]
+std = ["pallet-evidence/std"]
+runtime-benchmarks = ["pallet-evidence/runtime-benchmarks"]

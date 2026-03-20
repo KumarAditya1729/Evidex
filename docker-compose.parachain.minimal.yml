@@ -1,0 +1,55 @@
+services:
+  # Relay Chain (Polkadot)
+  relay-chain-alice:
+    image: parity/polkadot:latest
+    container_name: evidex-relay-alice
+    ports:
+      - "30333:30333"
+      - "9933:9933"
+      - "9615:9615"
+    command: >
+      polkadot
+      --chain polkadot-local
+      --alice
+      --node-key 0000000000000000000000000000000000000000000000000000000000000001
+      --unsafe-ws-external
+      --unsafe-rpc-external
+      --rpc-cors all
+      --rpc-methods=unsafe
+      --validator
+      --out-peers 0
+      --in-peers 0
+    volumes:
+      - relay-alice-data:/data
+    networks:
+      - evidex-network
+
+  relay-chain-bob:
+    image: parity/polkadot:latest
+    container_name: evidex-relay-bob
+    ports:
+      - "30334:30333"
+      - "9944:9933"
+    command: >
+      polkadot
+      --chain polkadot-local
+      --bob
+      --unsafe-ws-external
+      --unsafe-rpc-external
+      --rpc-cors all
+      --rpc-methods=unsafe
+      --validator
+      --out-peers 0
+      --in-peers 0
+    volumes:
+      - relay-bob-data:/data
+    networks:
+      - evidex-network
+
+volumes:
+  relay-alice-data:
+  relay-bob-data:
+
+networks:
+  evidex-network:
+    driver: bridge

@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Chain {
+  ETHEREUM
+  POLYGON
+  BITCOIN
+  POLKADOT
+}
+
+enum EvidenceStatus {
+  PENDING
+  ANCHORED
+  FAILED
+}
+
+model User {
+  id            String            @id @default(cuid())
+  walletAddress String            @unique
+  name          String?           @unique
+  passwordHash  String?
+  role          Role              @default(USER)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  evidences     Evidence[]
+  logs          VerificationLog[]
+
+  @@index([role])
+}
+
+model Evidence {
+  id               String            @id @default(cuid())
+  userId           String
+  originalFilename String
+  mimeType         String
+  sizeBytes        BigInt
+  sha256Hash       String            @unique
+  ipfsCID          String
+  chain            Chain
+  chainTxHash      String
+  chainTimestamp   DateTime
+  status           EvidenceStatus    @default(ANCHORED)
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  anchors          Anchor[]
+  verificationLogs VerificationLog[]
+
+  @@index([userId, createdAt])
+  @@index([chain, chainTxHash])
+}
+
+model Anchor {
+  id          String   @id @default(cuid())
+  evidenceId  String
+  chain       Chain
+  txHash      String
+  explorerUrl String?
+  anchoredAt  DateTime
+  createdAt   DateTime @default(now())
+  evidence    Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([evidenceId, chain])
+  @@unique([chain, txHash])
+  @@index([chain, anchoredAt])
+}
+
+model VerificationLog {
+  id         String    @id @default(cuid())
+  evidenceId String?
+  userId     String?
+  chain      Chain
+  hash       String
+  result     Boolean
+  details    Json?
+  createdAt  DateTime  @default(now())
+  evidence   Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([hash, chain])
+  @@index([createdAt])
+}
