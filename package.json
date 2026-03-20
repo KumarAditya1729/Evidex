@@ -26,6 +26,9 @@
     "turbo": "^2.1.1",
     "typescript": "^5.6.3"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "@prisma/client",
