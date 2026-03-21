@@ -83,14 +83,21 @@ export function SignupForm() {
       </p>
 
       {!isConnected ? (
-        <button
-          type="button"
-          className="btn-secondary"
-          disabled={isConnecting || !connector}
-          onClick={() => connector && connect({ connector })}
-        >
-          {isConnecting ? "Connecting Wallet..." : "Connect Wallet"}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={isConnecting || !connector}
+            onClick={() => connector && connect({ connector })}
+          >
+            {isConnecting ? "Connecting Wallet..." : "Connect Wallet"}
+          </button>
+          {!connector && (
+            <p className="text-xs text-center text-signal">
+              ⚠️ No Web3 wallet detected. Please install a wallet extension (e.g. MetaMask).
+            </p>
+          )}
+        </div>
       ) : (
         <p className="rounded-xl border border-cloud/10 bg-canvas/40 px-4 py-3 text-sm text-cloud/80">
           Connected wallet: <span className="font-mono">{shortAddress(address ?? "")}</span>
