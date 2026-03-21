@@ -71,7 +71,7 @@ export default async function ExplorerPage({
         </div>
       </div>
       <div className="grid gap-4">
-        {evidences.map((evidence) => (
+        {evidences.map((evidence: any) => (
           <article key={evidence.id} className="card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="space-y-1">
               <p className="text-sm text-cloud/60">{evidence.chain}</p>
