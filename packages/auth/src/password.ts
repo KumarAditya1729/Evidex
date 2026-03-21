@@ -1,7 +1,7 @@
 import { randomBytes, scrypt, timingSafeEqual } from "crypto";
 
 const KEY_LENGTH = 64;
-const SCRYPT_N = 32768;
+const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 
