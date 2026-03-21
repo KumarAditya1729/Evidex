@@ -1,5 +1,6 @@
 import { Chain, EvidenceStatus, Role, type Prisma } from "@prisma/client";
 import { prisma } from "./client";
+import { serializeBigInt } from "./utils";
 
 function resolveRoleForWallet(walletAddress: string): Role {
   return process.env.ADMIN_WALLET_ADDRESS?.toLowerCase() === walletAddress.toLowerCase()
@@ -169,7 +170,7 @@ export async function getEvidenceById(id: string) {
 export async function listExplorerEvidence(input?: { limit?: number; role?: Role }) {
   const limit = Math.min(input?.limit ?? 50, 100); // hard cap — never exceed 100
 
-  return prisma.evidence.findMany({
+  const evidences = await prisma.evidence.findMany({
     where: input?.role
       ? {
         user: {
@@ -186,6 +187,8 @@ export async function listExplorerEvidence(input?: { limit?: number; role?: Role
     },
     take: limit
   });
+
+  return serializeBigInt(evidences);
 }
 
 export async function createVerificationLog(input: {

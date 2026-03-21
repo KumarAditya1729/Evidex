@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       const chain = parseChain(url.searchParams.get("chain") ?? undefined);
       const blockchainService = await createBlockchainServiceFromEnv();
       enriched = await Promise.all(
-        evidence.map(async (item) => ({
+        evidence.map(async (item: any) => ({
           ...item,
           chainProof: await blockchainService.getTransactionDetails(chain, item.chainTxHash)
         }))
