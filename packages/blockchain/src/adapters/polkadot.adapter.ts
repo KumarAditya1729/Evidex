@@ -159,8 +159,8 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
             return;
           }
 
-          if (result.status.isFinalized) {
-            finalizedBlockHash = result.status.asFinalized.toHex();
+          if (result.status.isInBlock) {
+            finalizedBlockHash = result.status.asInBlock.toHex();
             if (unsub) unsub();
             resolve();
           }
@@ -325,7 +325,12 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
             signer: unknown,
             callback: (result: {
               txHash: { toHex(): string };
-              status: { isFinalized: boolean; asFinalized: { toHex(): string } };
+              status: { 
+                isFinalized: boolean; 
+                asFinalized: { toHex(): string };
+                isInBlock: boolean;
+                asInBlock: { toHex(): string }
+              };
               dispatchError?: { toString(): string };
             }) => void
           ) => Promise<() => void>;
@@ -348,7 +353,12 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
         signer: unknown,
         callback: (result: {
           txHash: { toHex(): string };
-          status: { isFinalized: boolean; asFinalized: { toHex(): string } };
+          status: { 
+            isFinalized: boolean; 
+            asFinalized: { toHex(): string };
+            isInBlock: boolean;
+            asInBlock: { toHex(): string }
+          };
           dispatchError?: { toString(): string };
         }) => void
       ) => Promise<() => void>;
