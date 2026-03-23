@@ -124,7 +124,6 @@ Cargo.lock
 **/cache/
 
 # Package manager files
-pnpm-lock.yaml
 package-lock.json
 yarn.lock
 

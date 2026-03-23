@@ -8,12 +8,14 @@ const nextConfig = {
     "@evidex/blockchain"
   ],
   experimental: {
+    serverMinification: false, // Prevents SWC from emitting \00 octal escapes in bundled Node modules
     serverComponentsExternalPackages: [
       "@prisma/client",
       "prisma",
       "ioredis",
       "amqplib",
       "@polkadot/api",
+      "@polkadot/util-crypto",
       "bitcoinjs-lib"
     ]
   },

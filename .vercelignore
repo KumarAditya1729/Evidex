@@ -1,55 +1,52 @@
 # Dependencies
-node_modules
-.pnpm-store
-.npm
+node_modules/
+**/node_modules/
+.pnpm-store/
+.npm/
 
 # Build artifacts
-.next
-dist
-build
+.next/
+**/dist/
+**/build/
+.turbo/
+**/cache/
 
 # Large directories
-parachain
-contracts
+parachain/
+contracts/
+deploy/
+deploy-minimal/
+deploy-simple/
 .turbo_stale_*
+.next_stale_*
+*_stale_*
 
 # Development files
 .env
 .env.*
 !.env.example
 
-# Git
-.git
+# Git and IDE
+.git/
+.github/
 .gitignore
-
-# IDE
-.vscode
-.idea
+.vscode/
+.idea/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Cache
-.cache
-.parcel-cache
-
-# Testing
-coverage
-.nyc_output
-
 # Misc
+*.log
 *.tgz
 *.tar.gz
-README.md
+README*.md
 *.md
-
-# Additional large files
 docker-compose*.yml
 scripts/
+tests/
+test/
+**/test/
+**/tests/
+docs/

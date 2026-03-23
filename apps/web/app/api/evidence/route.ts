@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(serializeForJson(result));
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Evidence upload failed." },
+      { error: error instanceof Error ? error.stack || error.message : "Evidence upload failed." },
       { status: 400 }
     );
   } finally {

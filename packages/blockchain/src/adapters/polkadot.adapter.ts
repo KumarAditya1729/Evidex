@@ -24,6 +24,19 @@ interface PolkadotAdapterConfig {
   enableRemarkFallback?: boolean;
 }
 
+export class AnchoringError extends Error {
+  code: string;
+  details?: Record<string, unknown>;
+
+  constructor(code: string, details?: Record<string, unknown>, message?: string) {
+    super(message || code);
+    this.name = "AnchoringError";
+    this.code = code;
+    this.details = details;
+    Object.setPrototypeOf(this, AnchoringError.prototype);
+  }
+}
+
 interface SubscanResponse {
   data?: {
     hash?: string;
@@ -84,37 +97,83 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
     const hashHex = normalizeHash(payload.hashHex);
     const tx = this.buildAnchorExtrinsic(api, hashHex, payload.ipfsCID);
 
+    // ==========================================
+    // Pre-flight Validation: Check Balance & Fees
+    // ==========================================
+    const accountInfo = await api.query.system.account(signer.address);
+    const freeBalance = (accountInfo as any).data.free.toBigInt();
+
+    // If balance is exactly 0, even fee estimation (paymentInfo) will throw a 1010 RPC error
+    if (freeBalance === 0n) {
+      await api.disconnect();
+      throw new AnchoringError("INSUFFICIENT_FUNDS", {
+        requiredFee: "Unknown",
+        currentBalance: "0",
+        address: signer.address,
+        chain: this.chain
+      }, "Account balance is absolute zero. Cannot pay for transaction fees.");
+    }
+
+    let estimatedFee = 0n;
+    try {
+      const paymentInfo = await tx.paymentInfo(signer);
+      estimatedFee = paymentInfo.partialFee.toBigInt();
+    } catch (error: any) {
+      if (error?.message?.includes("1010") || error?.message?.includes("Inability to pay some fees")) {
+        await api.disconnect();
+        throw new AnchoringError("INSUFFICIENT_FUNDS", {
+          requiredFee: "Unknown",
+          currentBalance: freeBalance.toString(),
+          address: signer.address,
+          chain: this.chain
+        }, "Account balance is too low to even simulate the transaction fee.");
+      }
+      throw error;
+    }
+
+    if (freeBalance < estimatedFee) {
+      await api.disconnect();
+      throw new AnchoringError("INSUFFICIENT_FUNDS", {
+        requiredFee: estimatedFee.toString(),
+        currentBalance: freeBalance.toString(),
+        address: signer.address,
+        chain: this.chain
+      }, "Insufficient native balance to pay for transaction fees.");
+    }
+    // ==========================================
+
     let txHash = tx.hash.toHex();
     let finalizedBlockHash: string | undefined;
     let blockNumber: number | undefined;
     let chainTimestamp = Math.floor(Date.now() / 1000);
 
-    await new Promise<void>((resolve, reject) => {
-      let unsub: (() => void) | undefined;
-      tx.signAndSend(signer, (result) => {
-        txHash = result.txHash.toHex();
+    await Promise.race([
+      new Promise<void>((resolve, reject) => {
+        let unsub: (() => void) | undefined;
+        tx.signAndSend(signer, (result) => {
+          txHash = result.txHash.toHex();
 
-        if (result.dispatchError) {
-          if (unsub) {
-            unsub();
+          if (result.dispatchError) {
+            if (unsub) unsub();
+            reject(new Error(result.dispatchError.toString()));
+            return;
           }
-          reject(new Error(result.dispatchError.toString()));
-          return;
-        }
 
-        if (result.status.isFinalized) {
-          finalizedBlockHash = result.status.asFinalized.toHex();
-          if (unsub) {
-            unsub();
+          if (result.status.isFinalized) {
+            finalizedBlockHash = result.status.asFinalized.toHex();
+            if (unsub) unsub();
+            resolve();
           }
-          resolve();
-        }
-      })
-        .then((u) => {
-          unsub = u;
         })
-        .catch(reject);
-    });
+          .then((u) => {
+            unsub = u;
+          })
+          .catch(reject);
+      }),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error("Transaction timed out waiting for finalization on the blockchain (60s).")), 60000)
+      )
+    ]);
 
     if (finalizedBlockHash) {
       const header = await api.rpc.chain.getHeader(finalizedBlockHash);
@@ -217,7 +276,17 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
 
   private async createApi(): Promise<ApiPromise> {
     const provider = new WsProvider(this.wsUrl);
-    return ApiPromise.create({ provider });
+    
+    // Vercel serverless functions will hang indefinitely if WsProvider tries to reconnect to an unreachable node (like localhost)
+    return Promise.race([
+      ApiPromise.create({ provider }),
+      new Promise<ApiPromise>((_, reject) =>
+        setTimeout(() => {
+          provider.disconnect().catch(() => {});
+          reject(new Error(`Failed to connect to Polkadot Node at ${this.wsUrl} within 10 seconds. Please check your POLKADOT_WS_URL.`));
+        }, 10000)
+      )
+    ]);
   }
 
   private async fetchSubscanExtrinsic(txHash: string): Promise<SubscanResponse> {
@@ -251,6 +320,7 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
         const tx = submitMethod(hashUtf8, cidUtf8);
         return tx as {
           hash: { toHex(): string };
+          paymentInfo: (signer: unknown) => Promise<{ partialFee: { toBigInt(): bigint } }>;
           signAndSend: (
             signer: unknown,
             callback: (result: {
@@ -273,6 +343,7 @@ export class PolkadotEvidenceAdapter implements BlockchainAdapter {
     const tx = api.tx.system.remarkWithEvent(remark);
     return tx as {
       hash: { toHex(): string };
+      paymentInfo: (signer: unknown) => Promise<{ partialFee: { toBigInt(): bigint } }>;
       signAndSend: (
         signer: unknown,
         callback: (result: {
