@@ -92,7 +92,24 @@ export async function createEvidenceRecord(input: {
   chainTimestamp: number;
   explorerUrl?: string;
   metadata?: Prisma.InputJsonValue;
+  additionalAnchors?: Array<{
+    chain: Chain;
+    txHash: string;
+    explorerUrl?: string;
+    timestamp: number;
+  }>;
 }) {
+  const primaryAnchorAt = new Date(input.chainTimestamp * 1000);
+  const allAnchors = [
+    { chain: input.chain, txHash: input.txHash, anchoredAt: primaryAnchorAt, explorerUrl: input.explorerUrl },
+    ...(input.additionalAnchors ?? []).map(a => ({
+      chain: a.chain,
+      txHash: a.txHash,
+      anchoredAt: new Date(a.timestamp * 1000),
+      explorerUrl: a.explorerUrl
+    }))
+  ];
+
   return prisma.evidence.create({
     data: {
       userId: input.userId,
@@ -103,16 +120,11 @@ export async function createEvidenceRecord(input: {
       ipfsCID: input.ipfsCID,
       chain: input.chain,
       chainTxHash: input.txHash,
-      chainTimestamp: new Date(input.chainTimestamp * 1000),
+      chainTimestamp: primaryAnchorAt,
       status: EvidenceStatus.ANCHORED,
       metadata: input.metadata,
       anchors: {
-        create: {
-          chain: input.chain,
-          txHash: input.txHash,
-          anchoredAt: new Date(input.chainTimestamp * 1000),
-          explorerUrl: input.explorerUrl
-        }
+        create: allAnchors
       }
     },
     include: {

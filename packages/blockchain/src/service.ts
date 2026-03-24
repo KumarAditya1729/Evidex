@@ -13,6 +13,16 @@ interface BlockchainServiceOptions {
   adapters: Partial<Record<SupportedChain, BlockchainAdapter>>;
 }
 
+export interface MultiChainAnchorResult {
+  chain: SupportedChain;
+  receipt: AnchorReceipt;
+}
+
+export interface MultiChainAnchorFailure {
+  chain: SupportedChain;
+  error: string;
+}
+
 export class BlockchainService {
   private readonly adapters: Partial<Record<SupportedChain, BlockchainAdapter>>;
 
@@ -27,6 +37,42 @@ export class BlockchainService {
   async anchorEvidence(chain: SupportedChain, payload: AnchorPayload): Promise<AnchorReceipt> {
     const adapter = this.getAdapter(chain);
     return adapter.anchorEvidence(payload);
+  }
+
+  /**
+   * Anchors evidence on ALL configured chains simultaneously.
+   * Uses Promise.allSettled so a failure on one chain does not block others.
+   */
+  async anchorEvidenceOnAllChains(payload: AnchorPayload): Promise<{
+    successes: MultiChainAnchorResult[];
+    failures: MultiChainAnchorFailure[];
+  }> {
+    const chains = this.getSupportedChains();
+
+    const results = await Promise.allSettled(
+      chains.map(async (chain) => {
+        const receipt = await this.anchorEvidence(chain, payload);
+        return { chain, receipt } as MultiChainAnchorResult;
+      })
+    );
+
+    const successes: MultiChainAnchorResult[] = [];
+    const failures: MultiChainAnchorFailure[] = [];
+
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      const chain = chains[i];
+      if (result.status === "fulfilled") {
+        successes.push(result.value);
+      } else {
+        failures.push({
+          chain,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason)
+        });
+      }
+    }
+
+    return { successes, failures };
   }
 
   async verifyEvidence(chain: SupportedChain, payload: VerifyPayload): Promise<VerificationResult> {
@@ -52,7 +98,6 @@ export class BlockchainService {
     if (!adapter) {
       throw new Error(`Chain adapter not configured for ${chain}.`);
     }
-
     return adapter;
   }
 }
@@ -65,7 +110,7 @@ export async function createBlockchainServiceFromEnv(): Promise<BlockchainServic
   }
 
   blockchainServicePromise = buildBlockchainServiceFromEnv().catch(err => {
-    blockchainServicePromise = null; // clear so next call retries
+    blockchainServicePromise = null;
     throw err;
   });
   return blockchainServicePromise;
@@ -93,6 +138,22 @@ async function buildBlockchainServiceFromEnv(): Promise<BlockchainService> {
     submitExtrinsic: process.env.POLKADOT_SUBMIT_EXTRINSIC ?? "submitEvidence",
     enableRemarkFallback: process.env.POLKADOT_ENABLE_REMARK_FALLBACK !== "false"
   });
+
+  // Optional: Ethereum Sepolia adapter — only registered when private key is provided
+  const evmPrivateKey = process.env.EVM_PRIVATE_KEY;
+  const sepoliaRpcUrl = process.env.ETHEREUM_SEPOLIA_RPC_URL;
+  const sepoliaContractAddress = process.env.ETHEREUM_SEPOLIA_CONTRACT_ADDRESS;
+  if (evmPrivateKey && sepoliaRpcUrl && sepoliaContractAddress) {
+    const { EvmEvidenceAdapter } = await import("./adapters/evm.adapter");
+    adapters["ethereum-sepolia" as SupportedChain] = new EvmEvidenceAdapter({
+      chain: "ethereum" as any,
+      rpcUrl: sepoliaRpcUrl,
+      contractAddress: sepoliaContractAddress,
+      privateKey: evmPrivateKey,
+      explorerBaseUrl: "https://sepolia.etherscan.io/tx/"
+    });
+    console.log("[EVIDEX] Ethereum Sepolia adapter registered for multi-chain anchoring.");
+  }
 
   return new BlockchainService({ adapters });
 }
