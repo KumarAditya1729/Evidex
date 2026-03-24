@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Role, listExplorerEvidence } from "@evidex/database";
+import { getSessionFromCookies } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +24,24 @@ export default async function ExplorerPage({
     role?: string;
   };
 }) {
+  const session = await getSessionFromCookies();
+  if (!session) {
+    redirect("/");
+  }
+
+  const isAdmin = session.role === "ADMIN";
   const roleFilter = parseRoleFilter(searchParams?.role);
   const roleQuery = roleFilter === "ALL" ? "" : `?role=${roleFilter}`;
   const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const shareUrl = `${appBaseUrl}/explorer${roleQuery}`;
   const csvUrl = `/api/explorer${roleQuery ? `${roleQuery}&format=csv` : "?format=csv"}`;
   const liveJsonUrl = `/api/explorer${roleQuery ? `${roleQuery}&includeChain=true` : "?includeChain=true"}`;
+
   const evidences = await listExplorerEvidence({
     limit: 100,
-    role: roleFilter === "ALL" ? undefined : roleFilter
+    // Admins can filter by role; regular users always see only their own evidence
+    role: isAdmin && roleFilter !== "ALL" ? roleFilter : undefined,
+    walletAddress: isAdmin ? undefined : session.walletAddress.toLowerCase()
   });
 
   return (
@@ -52,23 +63,25 @@ export default async function ExplorerPage({
             </a>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/explorer" className={`btn-secondary ${roleFilter === "ALL" ? "border-accent text-accent" : ""}`}>
-            All Blocks
-          </Link>
-          <Link
-            href="/explorer?role=ADMIN"
-            className={`btn-secondary ${roleFilter === "ADMIN" ? "border-accent text-accent" : ""}`}
-          >
-            Admin Blocks
-          </Link>
-          <Link
-            href="/explorer?role=USER"
-            className={`btn-secondary ${roleFilter === "USER" ? "border-accent text-accent" : ""}`}
-          >
-            User Blocks
-          </Link>
-        </div>
+        {isAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <Link href="/explorer" className={`btn-secondary ${roleFilter === "ALL" ? "border-accent text-accent" : ""}`}>
+              All Blocks
+            </Link>
+            <Link
+              href="/explorer?role=ADMIN"
+              className={`btn-secondary ${roleFilter === "ADMIN" ? "border-accent text-accent" : ""}`}
+            >
+              Admin Blocks
+            </Link>
+            <Link
+              href="/explorer?role=USER"
+              className={`btn-secondary ${roleFilter === "USER" ? "border-accent text-accent" : ""}`}
+            >
+              User Blocks
+            </Link>
+          </div>
+        )}
       </div>
       <div className="grid gap-4">
         {evidences.map((evidence: any) => (
