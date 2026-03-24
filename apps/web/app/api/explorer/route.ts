@@ -22,12 +22,20 @@ export async function GET(request: NextRequest) {
     const includeChain = url.searchParams.get("includeChain") === "true";
     const format = url.searchParams.get("format");
 
+    const isAdmin = session.role === "ADMIN";
+
+    // Only admins can filter by role. Non-admins always see only their own evidence.
     const role =
-      roleParam === Role.ADMIN ? Role.ADMIN : roleParam === Role.USER ? Role.USER : undefined;
+      isAdmin && roleParam === Role.ADMIN ? Role.ADMIN
+      : isAdmin && roleParam === Role.USER ? Role.USER
+      : undefined;
+
+    const walletFilter = isAdmin ? undefined : session.walletAddress.toLowerCase();
 
     const evidence = await listExplorerEvidence({
       limit: Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 100) : 50, // cap at 100
-      role
+      role,
+      walletAddress: walletFilter
     });
 
     if (format === "csv") {

@@ -167,17 +167,14 @@ export async function getEvidenceById(id: string) {
   });
 }
 
-export async function listExplorerEvidence(input?: { limit?: number; role?: Role }) {
+export async function listExplorerEvidence(input?: { limit?: number; role?: Role; walletAddress?: string }) {
   const limit = Math.min(input?.limit ?? 50, 100); // hard cap — never exceed 100
 
   const evidences = await prisma.evidence.findMany({
-    where: input?.role
-      ? {
-        user: {
-          role: input.role
-        }
-      }
-      : undefined,
+    where: {
+      ...(input?.role ? { user: { role: input.role } } : {}),
+      ...(input?.walletAddress ? { user: { walletAddress: input.walletAddress.toLowerCase() } } : {})
+    },
     include: {
       user: true,
       anchors: true
