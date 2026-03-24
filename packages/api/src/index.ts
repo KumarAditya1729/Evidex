@@ -4,3 +4,5 @@ export * from "./admin.service";
 export * from "./chains";
 export * from "./cache";
 export * from "./rate-limit";
+export * from "./merkle";
+export * from "./batch.service";

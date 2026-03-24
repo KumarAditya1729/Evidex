@@ -20,14 +20,62 @@ const evidenceUploadInputSchema = z.object({
   content: z.instanceof(Buffer).optional(),
   filePath: z.string().optional(),
   hash: z.string().optional(),
-  metadata: z.record(z.any()).optional()
+  metadata: z.record(z.any()).optional(),
+  priority: z.enum(["cost", "speed", "security", "auto"]).default("auto")
 }).refine(data => data.content !== undefined || (data.filePath !== undefined && data.hash !== undefined), {
   message: "Must provide either Buffer content, or filePath + hash for streaming."
 });
 
+const FALLBACK_CHAINS: Record<string, string[]> = {
+  "polygon": ["arbitrum"], // Typical EVM routing
+  "ethereum": ["optimism", "base"],
+  "polkadot": ["kusama", "moonbeam"], // Substrate fallback
+  "bsc": ["opbnb"]
+};
+
+async function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function anchorWithRetryAndFallback(blockchainService: any, requestedChain: string, payload: { hashHex: string, ipfsCID: string, walletAddress: string }) {
+  const MAX_RETRIES = 2; // Up to 3 sequential attempts on primary
+  
+  // 1. Transient RPC Retry Logic
+  let attempt = 0;
+  while (attempt <= MAX_RETRIES) {
+    try {
+      const receipt = await blockchainService.anchorEvidence(requestedChain, payload);
+      return { receipt, actualChain: requestedChain };
+    } catch (error) {
+      attempt++;
+      if (attempt > MAX_RETRIES) {
+        console.warn(`[EVIDEX] Primary chain ${requestedChain} failed all ${MAX_RETRIES + 1} attempts. Routing to fallback...`);
+        break;
+      }
+      console.log(`[EVIDEX] Transient failure on ${requestedChain}. Retrying in ${attempt}s...`);
+      await sleep(attempt * 1000); // 1s, 2s exponential backoff
+    }
+  }
+
+  // 2. Cross-Chain Fallback Logic
+  const fallbacks = FALLBACK_CHAINS[requestedChain] || [];
+  for (const fallbackChain of fallbacks) {
+    console.log(`[EVIDEX] ATTEMPTING FALLBACK ON: ${fallbackChain}...`);
+    try {
+      const receipt = await blockchainService.anchorEvidence(fallbackChain, payload);
+      console.log(`[EVIDEX] Successfully anchored on fallback chain: ${fallbackChain}`);
+      return { receipt, actualChain: fallbackChain };
+    } catch (error) {
+      console.error(`[EVIDEX] Fallback chain ${fallbackChain} failed as well.`);
+    }
+  }
+
+  throw new Error(`CRITICAL FAILURE: Anchoring failed completely on target chain (${requestedChain}) and all fallback chains (${fallbacks.join(", ")}).`);
+}
+
 export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUploadInputSchema>) {
   const input = evidenceUploadInputSchema.parse(rawInput);
-  const chain = parseChain(input.chain);
+  const chain = parseChain(input.chain, input.priority);
   const hash = input.hash || sha256Hex(input.content!);
 
   await assertRateLimit({
@@ -62,11 +110,14 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
       });
 
   const blockchainService = await createBlockchainServiceFromEnv();
-  const anchorReceipt = await blockchainService.anchorEvidence(chain, {
+  
+  const { receipt: anchorReceipt, actualChain } = await anchorWithRetryAndFallback(blockchainService, chain, {
     hashHex: hash,
     ipfsCID: ipfsResult.cid,
     walletAddress: user.walletAddress
   });
+  
+  const actualPrismaChain = toPrismaChain(parseChain(actualChain));
 
   const evidence = await createEvidenceRecord({
     userId: user.id,
@@ -75,18 +126,22 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
     sizeBytes: BigInt(input.content ? input.content.length : ipfsResult.size),
     sha256Hash: hash,
     ipfsCID: ipfsResult.cid,
-    chain: prismaChain,
+    chain: actualPrismaChain,
     txHash: anchorReceipt.txHash,
     chainTimestamp: anchorReceipt.timestamp,
     explorerUrl: anchorReceipt.explorerUrl,
-    metadata: (input.metadata ?? {}) as Prisma.InputJsonValue
+    metadata: {
+      ...((input.metadata ?? {}) as any),
+      requestedChain: chain,
+      wasFallback: actualChain !== chain
+    }
   });
 
   await publishEvidenceEvent({
     type: "evidence.anchored",
     evidenceId: evidence.id,
     walletAddress: user.walletAddress,
-    chain,
+    chain: actualChain as any,
     txHash: anchorReceipt.txHash,
     hash,
     createdAt: new Date().toISOString()

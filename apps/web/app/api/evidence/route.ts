@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processEvidenceUpload } from "@evidex/api/evidence.service";
-import { PRIMARY_CHAIN } from "@evidex/api/chains";
 import { listEvidenceByUser } from "@evidex/database";
 import { getSessionFromRequest } from "@/lib/session";
 import { serializeForJson } from "@/lib/serializers";
@@ -39,7 +38,8 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get("file");
-  const chain = PRIMARY_CHAIN;
+  const chain = formData.get("chain") ? String(formData.get("chain")) : undefined;
+  const priority = (formData.get("priority") ? String(formData.get("priority")) : "auto") as "auto" | "cost" | "speed" | "security";
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "File is required." }, { status: 400 });
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
     const result = await processEvidenceUpload({
       walletAddress: session.walletAddress,
       chain,
+      priority,
       filename: file.name,
       mimeType: file.type || "application/octet-stream",
       filePath: tmpPath,

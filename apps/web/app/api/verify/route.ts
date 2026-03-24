@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PRIMARY_CHAIN } from "@evidex/api/chains";
+import { parseChain } from "@evidex/api/chains";
 import { verifyEvidence } from "@evidex/api/verification.service";
 import { getSessionFromRequest } from "@/lib/session";
 import { serializeForJson } from "@/lib/serializers";
@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const chain = PRIMARY_CHAIN;
+    const chainStr = formData.get("chain") ? String(formData.get("chain")) : undefined;
+    const chain = parseChain(chainStr);
     const hash = formData.get("hash") ? String(formData.get("hash")) : undefined;
     const file = formData.get("file");
     const session = await getSessionFromRequest(request);
