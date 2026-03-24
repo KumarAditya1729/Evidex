@@ -19,14 +19,13 @@ export function getAvailableChains(): SupportedChain[] {
 /**
  * 🧠 Core AI-Assisted Routing Heuristic 
  * Selects the optimal chain mathematically based on the user's priority.
+ * NOTE: Only Polkadot adapter is currently configured. All priorities route to polkadot.
  */
 export function deriveOptimalChain(priority: RoutingPriority = "auto"): SupportedChain {
-  if (priority === "cost") return "polygon";
-  if (priority === "speed") return "arbitrum";
-  if (priority === "security") return "ethereum";
-  
-  // "auto" balances cost and speed for the best UX
-  return "polygon";
+  // Polkadot is the only fully configured chain adapter in the backend.
+  // When additional adapters (polygon, arbitrum, ethereum) are configured
+  // via env vars, update this routing logic accordingly.
+  return "polkadot";
 }
 
 export function parseChain(chainInput?: string, priority: RoutingPriority = "auto"): SupportedChain {
