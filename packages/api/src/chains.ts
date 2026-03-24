@@ -13,7 +13,7 @@ const CHAIN_METRICS = {
 export type RoutingPriority = "cost" | "speed" | "security" | "auto";
 
 export function getAvailableChains(): SupportedChain[] {
-  return ["polkadot", "polygon", "ethereum", "bitcoin", "arbitrum"];
+  return ["polkadot", "polygon", "polygon-amoy", "ethereum", "ethereum-sepolia", "bitcoin", "arbitrum"];
 }
 
 /**
@@ -50,13 +50,20 @@ export function toPrismaChain(chain: SupportedChain | string): Chain {
   
   switch (normalized) {
     case "ethereum":
+    case "ethereum-sepolia":
+    case "ethereum-goerli":
+    case "ethereum-holesky":
     case "arbitrum":
+    case "arbitrum-sepolia":
     case "optimism":
     case "base":
-      return Chain.ETHEREUM; // We map L2s to ETH for DB simplicity in this schema
+      return Chain.ETHEREUM;
     case "polygon":
+    case "polygon-amoy":
+    case "polygon-mumbai":
       return Chain.POLYGON;
     case "bitcoin":
+    case "bitcoin-testnet":
       return Chain.BITCOIN;
     case "polkadot":
     case "kusama":

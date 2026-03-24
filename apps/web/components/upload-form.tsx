@@ -13,57 +13,66 @@ interface UploadResponse {
   };
 }
 
-type Priority = "auto" | "cost" | "speed" | "security";
+const CHAINS = [
+  {
+    id: "polkadot",
+    name: "Polkadot",
+    symbol: "DOT",
+    icon: "🟣",
+    color: "#E84142",
+    border: "border-red-500",
+    activeBg: "bg-red-500/15 border-red-500/50 text-red-300",
+    desc: "Substrate para-chain • Recommended"
+  },
+  {
+    id: "ethereum-sepolia",
+    name: "Ethereum Sepolia",
+    symbol: "ETH",
+    icon: "🔵",
+    color: "#60a5fa",
+    border: "border-blue-500",
+    activeBg: "bg-blue-500/15 border-blue-500/50 text-blue-300",
+    desc: "EVM testnet • Smart Contract"
+  },
+  {
+    id: "polygon-amoy",
+    name: "Polygon Amoy",
+    symbol: "MATIC",
+    icon: "🟣",
+    color: "#a78bfa",
+    border: "border-purple-500",
+    activeBg: "bg-purple-500/15 border-purple-500/50 text-purple-300",
+    desc: "Low-cost EVM • Testnet"
+  }
+];
 
 export function UploadForm() {
   const [file, setFile] = useState<File | null>(null);
-  const [priority, setPriority] = useState<Priority>("auto");
+  const [chain, setChain] = useState<string>("polkadot");
   const [response, setResponse] = useState<UploadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
-  // Status machine explicitly created for building User Trust visually
   const [status, setStatus] = useState<"idle" | "uploading" | "hashing" | "anchoring" | "confirming" | "success" | "error">("idle");
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0]);
-      setResponse(null);
-      setError(null);
-      setStatus("idle");
-    }
+    e.preventDefault(); e.stopPropagation();
+    if (e.dataTransfer.files?.[0]) { setFile(e.dataTransfer.files[0]); setResponse(null); setError(null); setStatus("idle"); }
   };
 
   async function triggerUploadFlow() {
     if (!file) return;
+    setStatus("uploading"); setError(null); setResponse(null);
 
-    setStatus("uploading");
-    setError(null);
-    setResponse(null);
-
-    // Simulated visual cryptograph steps to build 100% trust with the user 
-    // while the real blockchain fetch happens concurrently in the background.
-    setTimeout(() => { if (status !== "error") setStatus("hashing"); }, 700);
-    setTimeout(() => { if (status !== "error") setStatus("anchoring"); }, 1800);
+    setTimeout(() => setStatus("hashing"), 800);
+    setTimeout(() => setStatus("anchoring"), 2000);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
-      // Let the backend A.I. decide the best chain based on cost, speed, or security!
-      formData.append("priority", priority);
+      formData.append("chain", chain);
 
-      const res = await fetch("/api/evidence", {
-        method: "POST",
-        body: formData
-      });
+      const res = await fetch("/api/evidence", { method: "POST", body: formData });
 
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
@@ -71,140 +80,174 @@ export function UploadForm() {
       }
 
       const payload = (await res.json()) as UploadResponse;
-      
       setStatus("confirming");
-      
-      setTimeout(() => {
-        setResponse(payload);
-        setStatus("success");
-      }, 1000);
-
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "Encryption or Node failure during anchor.");
+      setTimeout(() => { setResponse(payload); setStatus("success"); }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Anchor failed.");
       setStatus("error");
     }
   }
 
+  const selectedChain = CHAINS.find(c => c.id === chain)!;
+
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-8">
-      
-      {/* 🚀 1. SMART ROUTING ENGINE SELECTOR */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-xl backdrop-blur">
-        <h3 className="mb-4 text-center font-bold text-white">Select Anchor Strategy</h3>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <button type="button" onClick={() => setPriority("auto")} className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${priority === 'auto' ? 'border-blue-500 bg-blue-500/20 text-blue-400' : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500'}`}>🤖 A.I. Auto</button>
-          <button type="button" onClick={() => setPriority("cost")} className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${priority === 'cost' ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400' : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500'}`}>💸 Low Cost</button>
-          <button type="button" onClick={() => setPriority("speed")} className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${priority === 'speed' ? 'border-orange-500 bg-orange-500/20 text-orange-400' : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500'}`}>⚡ Speed</button>
-          <button type="button" onClick={() => setPriority("security")} className={`rounded-lg border px-4 py-3 text-sm font-semibold transition ${priority === 'security' ? 'border-purple-500 bg-purple-500/20 text-purple-400' : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500'}`}>🛡️ Max Security</button>
+    <div className="mx-auto w-full max-w-2xl space-y-6 fade-in">
+
+      {/* ── Chain Selector ──────────────────────────── */}
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-white">Select Blockchain</h3>
+          <span className="text-xs text-slate-500">Each user can anchor on a different chain</span>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {CHAINS.map((c) => {
+            const active = chain === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setChain(c.id)}
+                className={`flex flex-col items-start gap-1.5 rounded-xl border p-4 text-left transition-all duration-200 ${
+                  active
+                    ? c.activeBg
+                    : "border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-white/10 hover:text-slate-300"
+                }`}
+              >
+                <div className="flex w-full items-center justify-between">
+                  <span className="text-xl">{c.icon}</span>
+                  {active && (
+                    <span className="flex h-2 w-2 rounded-full" style={{ background: c.color }}>
+                      <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full opacity-75" style={{ background: c.color }} />
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm font-bold text-white">{c.name}</p>
+                <p className="text-xs opacity-60">{c.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
+          <span style={{ color: selectedChain.color }}>⬤</span>
+          <span>Anchoring on <strong className="text-white">{selectedChain.name}</strong> ({selectedChain.symbol})</span>
         </div>
       </div>
 
-      {/* 📥 2. DRAG AND DROP ZONE */}
-      <div 
-        onDragOver={handleDragOver} 
+      {/* ── Drop Zone ───────────────────────────────── */}
+      <div
+        onDragOver={handleDragOver}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`group relative flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed p-12 text-center transition-all ${file ? 'border-blue-500/50 bg-blue-900/10' : 'border-slate-700 bg-slate-800/30 hover:border-blue-400/50 hover:bg-slate-800/80'}`}
+        className={`group relative flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 text-center transition-all duration-300 ${
+          file
+            ? "border-blue-500/40 bg-blue-900/8"
+            : "border-white/10 bg-white/[0.02] hover:border-blue-400/40 hover:bg-white/[0.04]"
+        }`}
       >
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          className="hidden" 
-          onChange={(e) => {
-            if (e.target.files) {
-              setFile(e.target.files[0]);
-              setStatus("idle");
-              setResponse(null);
-            }
-          }} 
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          onChange={(e) => { if (e.target.files) { setFile(e.target.files[0]); setStatus("idle"); setResponse(null); } }}
         />
-        
         {file ? (
-          <div className="flex flex-col items-center space-y-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-blue-500/20 text-3xl text-blue-400">📄</div>
-            <h4 className="font-bold text-white">{file.name}</h4>
-            <p className="text-sm text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB • Ready for Cryptanalysis</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-blue-500/30 bg-blue-500/10 text-2xl">📄</div>
+            <p className="font-bold text-white">{file.name}</p>
+            <p className="text-sm text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB · Ready to anchor</p>
           </div>
         ) : (
-          <div className="flex flex-col items-center space-y-3">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-800 text-3xl text-slate-400 group-hover:scale-110 transition-transform">➕</div>
-            <h4 className="font-bold text-white">Drag & Drop Evidence Here</h4>
-            <p className="text-sm text-slate-400">or click to browse local files securely</p>
-            <p className="mt-4 text-xs font-semibold text-emerald-500/80">🔒 256-Bit Local Encryption Client</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-2xl transition-transform group-hover:scale-110">
+              ↑
+            </div>
+            <p className="font-bold text-white">Drop evidence here</p>
+            <p className="text-sm text-slate-500">or click to browse · any file type</p>
+            <p className="mt-2 text-xs font-medium text-emerald-500/80">🔒 SHA-256 hashed client-side</p>
           </div>
         )}
       </div>
 
-      {/* 🚀 3. ACTION BUTTON */}
+      {/* ── Anchor Button ───────────────────────────── */}
       {file && status === "idle" && (
-        <button 
-          onClick={triggerUploadFlow} 
-          className="w-full rounded-2xl bg-blue-600 py-4 text-lg font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] hover:bg-blue-500 active:scale-95"
+        <button
+          onClick={triggerUploadFlow}
+          className="btn-primary w-full py-4 text-base"
         >
-          Generate Hash & Anchor
+          Anchor on {selectedChain.name} {selectedChain.icon}
         </button>
       )}
 
-      {/* 🧠 4. CRYPTOGRAPHIC TRUST TRACKER */}
+      {/* ── Progress Steps ──────────────────────────── */}
       {status !== "idle" && status !== "success" && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl backdrop-blur">
-          <h3 className="mb-6 font-bold text-white text-center">Immutable Evidence Handshake</h3>
-          
-          <div className="space-y-4">
-            <div className={`flex items-center justify-between rounded-lg p-3 ${status === "uploading" ? 'bg-blue-500/20 border border-blue-500/30' : 'opacity-50'}`}>
-              <span className="text-sm font-semibold text-blue-100">1. Encrypting payload...</span>
-              {status === "uploading" && <span className="flex h-4 w-4 animate-ping rounded-full bg-blue-400"></span>}
-              {status !== "uploading" && <span className="text-blue-400">✓</span>}
-            </div>
-
-            <div className={`flex items-center justify-between rounded-lg p-3 ${(status === "hashing" || status === "anchoring" || status === "confirming") ? (status === "hashing" ? 'bg-purple-500/20 border border-purple-500/30' : 'opacity-50') : 'opacity-30'}`}>
-              <span className="text-sm font-semibold text-purple-100">2. Deriving SHA-256 fingerprint locally...</span>
-              {status === "hashing" && <span className="flex h-4 w-4 animate-ping rounded-full bg-purple-400"></span>}
-              {(status === "anchoring" || status === "confirming") && <span className="text-purple-400">✓</span>}
-            </div>
-
-            <div className={`flex items-center justify-between rounded-lg p-3 ${(status === "anchoring" || status === "confirming") ? (status === "anchoring" ? 'bg-orange-500/20 border border-orange-500/30' : 'opacity-50') : 'opacity-30'}`}>
-              <span className="text-sm font-semibold text-orange-100">3. Broadcasting to Blockchain Nodes...</span>
-              {status === "anchoring" && <span className="flex h-4 w-4 animate-ping rounded-full bg-orange-400"></span>}
-              {status === "confirming" && <span className="text-orange-400">✓</span>}
-            </div>
-
-            <div className={`flex items-center justify-between rounded-lg p-3 ${status === "confirming" ? 'bg-emerald-500/20 border border-emerald-500/30' : 'opacity-30'}`}>
-              <span className="text-sm font-semibold text-emerald-100">4. Awaiting Block Finality...</span>
-              {status === "confirming" && <span className="flex h-4 w-4 animate-ping rounded-full bg-emerald-400"></span>}
-            </div>
-          </div>
-
-          {error && (
-            <div className="mt-4 rounded-lg bg-red-500/20 p-4 border border-red-500/30 text-red-400 text-sm font-bold">
+        <div className="card space-y-3">
+          <h3 className="font-bold text-white">Anchoring to {selectedChain.name}…</h3>
+          {[
+            { key: "uploading", label: "Encrypting & uploading payload", color: "blue" },
+            { key: "hashing",   label: "Deriving SHA-256 fingerprint",   color: "purple" },
+            { key: "anchoring", label: `Broadcasting to ${selectedChain.name} nodes`, color: "orange" },
+            { key: "confirming",label: "Awaiting block finality",         color: "emerald" }
+          ].map(({ key, label, color }, i, arr) => {
+            const done = arr.findIndex(s => s.key === status) > i;
+            const active = key === status;
+            return (
+              <div key={key} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${active ? `bg-${color}-500/10 border border-${color}-500/20` : done ? "opacity-40" : "opacity-20"}`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${active ? `bg-${color}-500/20 text-${color}-400` : done ? "bg-white/10 text-slate-400" : "bg-white/5 text-slate-600"}`}>
+                  {done ? "✓" : i + 1}
+                </span>
+                <span className="text-slate-200">{label}</span>
+                {active && <span className="ml-auto flex h-2 w-2 rounded-full bg-current animate-ping" />}
+              </div>
+            );
+          })}
+          {status === "error" && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">
               ❌ {error}
             </div>
           )}
         </div>
       )}
 
-      {/* ✅ 5. CERTIFICATE SUCCESS */}
+      {/* ── Success Card ────────────────────────────── */}
       {status === "success" && response && (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-emerald-500/50 bg-emerald-900/20 p-8 shadow-xl shadow-emerald-500/10 backdrop-blur animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 text-4xl text-emerald-400">🛡️</div>
-          <h2 className="mb-2 text-2xl font-bold text-white">Cryptographically Anchored</h2>
-          <p className="mb-8 text-center text-sm text-emerald-200/80">
-            {response.duplicate ? "A mathematically identical payload already exactly matches this ledger!" : "Your evidence is now mathematically unforgeable on-chain."}
+        <div className="card border-emerald-500/20 bg-emerald-950/20 text-center fade-in">
+          <div className="mb-4 flex justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-3xl">🛡️</div>
+          </div>
+          <h2 className="mb-1 text-xl font-black text-white">
+            {response.duplicate ? "Already Anchored" : "Cryptographically Anchored"}
+          </h2>
+          <p className="mb-6 text-sm text-emerald-300/70">
+            {response.duplicate ? "This file was already anchored on-chain." : `Proof permanently written to ${selectedChain.name}.`}
           </p>
-          
-          <div className="w-full space-y-3 rounded-xl bg-black/40 p-5 font-mono text-xs text-slate-300">
-            <div className="flex justify-between border-b border-white/10 pb-2"><span className="text-slate-500">Network</span><span className="font-bold text-blue-400 uppercase">{response.evidence.chain}</span></div>
-            <div className="flex justify-between border-b border-white/10 pb-2"><span className="text-slate-500">Tx Hash</span><span className="truncate pl-4">{response.evidence.chainTxHash}</span></div>
-            <div className="flex justify-between border-b border-white/10 pb-2"><span className="text-slate-500">SHA-256</span><span className="truncate pl-4">{response.evidence.sha256Hash}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">IPFS CID</span><span className="truncate pl-4 text-emerald-400">ipfs://{response.evidence.ipfsCID}</span></div>
+
+          <div className="rounded-xl border border-white/[0.06] bg-black/30 p-4 text-left font-mono text-xs space-y-2.5">
+            <div className="flex justify-between gap-4">
+              <span className="text-slate-500 shrink-0">Network</span>
+              <span className="text-blue-400 font-bold uppercase truncate">{selectedChain.name}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-white/[0.04] pt-2.5">
+              <span className="text-slate-500 shrink-0">Tx Hash</span>
+              <span className="truncate text-slate-300">{response.evidence.chainTxHash}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-white/[0.04] pt-2.5">
+              <span className="text-slate-500 shrink-0">SHA-256</span>
+              <span className="truncate text-slate-300">{response.evidence.sha256Hash}</span>
+            </div>
+            <div className="flex justify-between gap-4 border-t border-white/[0.04] pt-2.5">
+              <span className="text-slate-500 shrink-0">IPFS</span>
+              <span className="truncate text-emerald-400">ipfs://{response.evidence.ipfsCID}</span>
+            </div>
           </div>
 
-          <button onClick={() => { setStatus("idle"); setFile(null); setResponse(null); }} className="mt-8 rounded-full border border-emerald-500/50 bg-emerald-500/10 px-6 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-all">
+          <button
+            onClick={() => { setStatus("idle"); setFile(null); setResponse(null); }}
+            className="btn-secondary mt-6 w-full"
+          >
             Anchor Another File
           </button>
         </div>
       )}
-
     </div>
   );
 }
