@@ -1,7 +1,7 @@
 import { verifyAuthToken } from "@evidex/auth";
 import { NextRequest, NextResponse } from "next/server";
 
-const protectedPrefixes = ["/dashboard", "/upload", "/settings", "/admin", "/evidence"];
+const protectedPrefixes = ["/dashboard", "/upload", "/settings", "/admin"];
 
 function addCorsHeaders(res: NextResponse) {
   const allowedOrigin = process.env.ALLOWED_ORIGINS || "*";
@@ -62,7 +62,6 @@ export const config = {
     "/dashboard/:path*", 
     "/upload/:path*", 
     "/settings/:path*", 
-    "/admin/:path*", 
-    "/evidence/:path*"
+    "/admin/:path*"
   ]
 };
