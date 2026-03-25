@@ -28,9 +28,16 @@ export default async function EvidenceDetailPage({ params }: { params: { id: str
     redirect("/dashboard");
   }
 
+  // Cast anchors to include the new cross-chain fields from our DB upgrade
+  type ExtendedAnchor = typeof evidence.anchors[number] & {
+    verifiedChain?: string;
+    crossChainProof?: string;
+  };
+  const anchors = evidence.anchors as ExtendedAnchor[];
+
   // Separate true cross-chain logic: Primary vs Verifiers
-  const primaryAnchor = evidence.anchors.find(a => !a.verifiedChain) || evidence.anchors[0];
-  const verifiers = evidence.anchors.filter(a => a.verifiedChain);
+  const primaryAnchor = anchors.find(a => !a.verifiedChain) || anchors[0];
+  const verifiers = anchors.filter(a => a.verifiedChain);
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 fade-in">
