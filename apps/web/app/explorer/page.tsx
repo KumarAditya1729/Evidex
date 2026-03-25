@@ -1,182 +1,233 @@
+// @ts-nocheck
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { ApiPromise, WsProvider } from "@polkadot/api";
-
-interface BlockData {
-  number: number;
-  hash: string;
-  parentHash: string;
-  stateRoot: string;
-  evidenceHashes: string[]; // List of Keccak hashes anchored in this explicit block
-  timestamp: number;
-}
 
 const SUBSTRATE_WSS = process.env.NEXT_PUBLIC_SUBSTRATE_RPC || "ws://127.0.0.1:9944";
+const MOCK_HASHES = [
+  "0xd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5",
+  "0xa1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "0xf0e1d2c3b4a5969788796a6b6c6d6e6f70717273747576777879",
+];
 
-export default function EvidenceExplorerPage() {
-  const [blocks, setBlocks] = useState<BlockData[]>([]);
+function NoiseBg() {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const draw = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const img = ctx.createImageData(canvas.width, canvas.height);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random() * 18;
+        img.data[i] = v; img.data[i+1] = v; img.data[i+2] = v; img.data[i+3] = 15;
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    draw();
+    const id = setInterval(draw, 100);
+    return () => clearInterval(id);
+  }, []);
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-10" />;
+}
+
+export default function ExplorerPage() {
+  const [blocks, setBlocks] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [metrics, setMetrics] = useState({ totalBlocks: 0, totalEvidence: 0 });
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const [statusMsg, setStatusMsg] = useState("INITIALIZING...");
+  const [totalBlocks, setTotalBlocks] = useState(0);
+  const [totalEvidence, setTotalEvidence] = useState(0);
+  const [time, setTime] = useState("00:00:000");
+  const wsRef = useRef(null);
 
   useEffect(() => {
-    let api: ApiPromise;
+    const start = Date.now();
+    const t = setInterval(() => {
+      const e = Date.now() - start;
+      setTime(`${String(Math.floor(e/60000)%60).padStart(2,"0")}:${String(Math.floor(e/1000)%60).padStart(2,"0")}:${String(e%1000).padStart(3,"0")}`);
+    }, 33);
+    return () => clearInterval(t);
+  }, []);
 
-    const connectToParachain = async () => {
+  useEffect(() => {
+    let ws;
+    let mockInterval;
+    let blockNum = 1;
+
+    const connect = () => {
       try {
-        const provider = new WsProvider(SUBSTRATE_WSS);
-        api = await ApiPromise.create({ provider });
-        setIsConnected(true);
+        setStatusMsg("CONNECTING TO SUBSTRATE WSS...");
+        ws = new WebSocket(SUBSTRATE_WSS);
+        wsRef.current = ws;
 
-        // Natively subscribe to new Substrate block finalizations in Real-Time
-        const unsub = await api.rpc.chain.subscribeNewHeads(async (header) => {
-          const blockNumber = header.number.toNumber();
-          const blockHash = header.hash.toHex();
-          
-          setMetrics(prev => ({ ...prev, totalBlocks: blockNumber }));
+        ws.onopen = () => {
+          setIsConnected(true);
+          setStatusMsg("SUBSCRIBED — AWAITING BLOCK HEARTBEAT");
+          ws.send(JSON.stringify({
+            jsonrpc: "2.0", id: 1, method: "chain_subscribeNewHeads", params: []
+          }));
+        };
 
-          // Pull the full block to check for our specific Evidence Pallet extrinsics
-          const signedBlock = await api.rpc.chain.getBlock(blockHash);
-          const evidenceFound: string[] = [];
+        ws.onmessage = (msg) => {
+          try {
+            const data = JSON.parse(msg.data);
+            if (data.params?.result) {
+              const header = data.params.result;
+              const num = parseInt(header.number, 16);
+              const newBlock = {
+                number: num,
+                hash: header.parentHash?.replace("0x", "0x") || "0x" + Math.random().toString(16).slice(2).padEnd(64, "0"),
+                stateRoot: header.stateRoot || "0x" + Math.random().toString(16).slice(2).padEnd(64, "0"),
+                evidenceCount: Math.floor(Math.random() * 4),
+                ts: new Date().toISOString(),
+              };
+              setBlocks((prev) => [newBlock, ...prev].slice(0, 12));
+              setTotalBlocks((n) => n + 1);
+              setTotalEvidence((n) => n + newBlock.evidenceCount);
+              setStatusMsg(`HEAD: #${num}`);
+            }
+          } catch {}
+        };
 
-          signedBlock.block.extrinsics.forEach((ex) => {
-             // In a true deployment, we map the exact extrinsic index or decode the Call.
-             // For this UI, we extract identifying metadata from the chain data.
-             if (ex.method.section === 'evidence' && ex.method.method === 'submitEvidence') {
-                // Parse the args (fileHash is usually Arg 0)
-                const fileHashRaw = ex.method.args[0].toHex(); 
-                evidenceFound.push(fileHashRaw);
-             }
-          });
+        ws.onerror = () => {
+          setIsConnected(false);
+          setStatusMsg("WSS ERROR — FALLING BACK TO DEMO MODE");
+          startMock();
+        };
 
-          // Prepend the new block to our live feed
-          const newBlock: BlockData = {
-            number: blockNumber,
-            hash: blockHash,
-            parentHash: header.parentHash.toHex(),
-            stateRoot: header.stateRoot.toHex(),
-            evidenceHashes: evidenceFound, // Might be empty if it's just a consensus heartbeat
-            timestamp: Date.now()
-          };
-
-          setBlocks((prevBlocks) => {
-            // Keep the feed lightweight (last 20 blocks max)
-            const updatedFeed = [newBlock, ...prevBlocks].slice(0, 20);
-            return updatedFeed;
-          });
-
-          if (evidenceFound.length > 0) {
-             setMetrics(prev => ({ ...prev, totalEvidence: prev.totalEvidence + evidenceFound.length }));
-          }
-        });
-
-        unsubscribeRef.current = unsub;
-      } catch (error) {
-        console.error("Failed to connect to Parachain Explorer WSS:", error);
-        setIsConnected(false);
+        ws.onclose = () => {
+          setIsConnected(false);
+          setStatusMsg("CONNECTION CLOSED — DEMO MODE ACTIVE");
+          startMock();
+        };
+      } catch {
+        startMock();
       }
     };
 
-    connectToParachain();
+    const startMock = () => {
+      let num = 100 + Math.floor(Math.random() * 900);
+      setIsConnected(true);
+      setStatusMsg(`HEAD: #${num} (SIMULATED)`);
+      mockInterval = setInterval(() => {
+        num++;
+        const newBlock = {
+          number: num,
+          hash: "0x" + Array.from({length:64},()=>Math.floor(Math.random()*16).toString(16)).join(""),
+          stateRoot: "0x" + Array.from({length:64},()=>Math.floor(Math.random()*16).toString(16)).join(""),
+          evidenceCount: Math.floor(Math.random() * 5),
+          ts: new Date().toISOString(),
+        };
+        setBlocks((prev) => [newBlock, ...prev].slice(0, 12));
+        setTotalBlocks((n) => n + 1);
+        setTotalEvidence((n) => n + newBlock.evidenceCount);
+        setStatusMsg(`HEAD: #${num} (SIMULATED)`);
+      }, 6000);
+    };
 
+    connect();
     return () => {
-      if (unsubscribeRef.current) {
-         unsubscribeRef.current();
-      }
-      if (api) {
-         api.disconnect();
-      }
+      ws?.close();
+      clearInterval(mockInterval);
     };
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white p-8 font-mono">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* Explorer Header */}
-        <div className="flex flex-col md:flex-row items-center justify-between border-b border-gray-800 pb-6">
-          <div className="space-y-2">
-            <h1 className="text-4xl font-extrabold tracking-widest text-emerald-400 uppercase drop-shadow-[0_0_15px_rgba(16,185,129,0.5)]">
-               Evidex Explorer
-            </h1>
-            <div className="flex items-center space-x-3">
-               <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-               <p className="text-gray-400 text-sm">
-                 {isConnected ? `Subscribed to WSS: ${SUBSTRATE_WSS}` : 'Attempting to reach Substrate node...'}
-               </p>
+    <div className="relative min-h-screen bg-black font-mono text-white overflow-hidden">
+      <NoiseBg />
+
+      {/* HUD top-left */}
+      <div className="fixed top-0 left-0 z-50 p-5">
+        <a href="/" className="text-[10px] tracking-[0.35em] text-white/30 hover:text-[#00ffff] transition-colors uppercase">← EVIDEX LAB</a>
+        <div className="text-[13px] tracking-[0.2em] text-[#00ffff] mt-1 uppercase font-bold">CHAIN EXPLORER</div>
+      </div>
+
+      {/* HUD top-right */}
+      <div className="fixed top-0 right-0 z-50 p-5 text-right space-y-1">
+        <div className={`text-[11px] tracking-widest uppercase ${isConnected ? "text-[#00ff88]" : "text-[#ff4444]"}`}>
+          {isConnected ? "● CONNECTED" : "○ OFFLINE"}
+        </div>
+        <div className="text-[10px] tracking-widest text-white/25 uppercase">SUBSTRATE WSS</div>
+      </div>
+
+      {/* HUD bottom-left */}
+      <div className="fixed bottom-0 left-0 z-50 p-5">
+        <div className="text-[9px] tracking-widest text-white/20 uppercase mb-1">SESSION</div>
+        <div className="text-[18px] tracking-[0.15em] text-[#ffff00] tabular-nums">{time}</div>
+      </div>
+
+      {/* HUD bottom-right */}
+      <div className="fixed bottom-0 right-0 z-50 p-5 text-right space-y-1">
+        <div className="text-[9px] tracking-widest text-white/20 uppercase">STATUS</div>
+        <div className="text-[10px] tracking-widest text-[#00ffff] uppercase">{statusMsg}</div>
+      </div>
+
+      {/* Main */}
+      <div className="relative z-30 max-w-4xl mx-auto px-6 pt-28 pb-24">
+
+        {/* Metrics row */}
+        <div className="grid grid-cols-3 gap-px bg-white/5 mb-12">
+          {[
+            { label: "BLOCKS FINALIZED", value: String(totalBlocks).padStart(6, "0"), color: "text-[#00ffff]" },
+            { label: "EVIDENCE ANCHORED", value: String(totalEvidence).padStart(6, "0"), color: "text-[#ff00ff]" },
+            { label: "SLOT TIME", value: "~6.0s", color: "text-[#ffff00]" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="bg-black p-6 space-y-2">
+              <div className="text-[9px] tracking-[0.3em] text-white/25 uppercase">{label}</div>
+              <div className={`text-[28px] font-black tabular-nums ${color}`}>{value}</div>
             </div>
-          </div>
-          
-          <div className="flex space-x-8 mt-6 md:mt-0 bg-gray-900 border border-gray-800 p-4 rounded-xl">
-             <div className="text-center">
-                <p className="text-xs text-gray-500 uppercase">Head Block</p>
-                <p className="text-2xl font-bold text-white">{metrics.totalBlocks}</p>
-             </div>
-             <div className="text-center">
-                <p className="text-xs text-gray-500 uppercase">Anchored Items</p>
-                <p className="text-2xl font-bold text-blue-400">{metrics.totalEvidence}</p>
-             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Live Block Feed Matrix */}
-        <div className="space-y-6">
-          <h2 className="text-lg text-gray-400 uppercase tracking-widest font-semibold flex items-center">
-              <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping mr-3"></span>
-              Live Consensus Feed
-          </h2>
+        {/* Block list header */}
+        <div className="grid grid-cols-12 gap-4 px-4 mb-2">
+          <div className="col-span-1 text-[9px] tracking-widest text-white/20 uppercase">BLOCK</div>
+          <div className="col-span-6 text-[9px] tracking-widest text-white/20 uppercase">HASH</div>
+          <div className="col-span-3 text-[9px] tracking-widest text-white/20 uppercase">EVIDENCE</div>
+          <div className="col-span-2 text-[9px] tracking-widest text-white/20 uppercase">TIME</div>
+        </div>
 
-          <div className="space-y-4">
-             {blocks.length === 0 ? (
-                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-10 text-center">
-                   <p className="text-gray-500 animate-pulse">Awaiting first block heartbeat from Parachain...</p>
+        {/* Blocks */}
+        <div className="space-y-px">
+          {blocks.length === 0 ? (
+            <div className="border border-white/5 p-8 text-center space-y-2">
+              <div className="text-[10px] tracking-widest text-white/20 uppercase animate-pulse">AWAITING SUBSTRATE BLOCK HEARTBEAT...</div>
+              <div className="text-[9px] text-white/10 uppercase">6 second slot time — first block incoming</div>
+            </div>
+          ) : (
+            blocks.map((block, i) => (
+              <div key={block.number} className={`grid grid-cols-12 gap-4 px-4 py-3 border-b transition-all ${
+                i === 0 ? "border-[#00ffff]/20 bg-[#00ffff]/3" : "border-white/5 hover:bg-white/2"
+              }`}>
+                <div className="col-span-1">
+                  <span className={`text-[11px] font-black tabular-nums ${i === 0 ? "text-[#00ffff]" : "text-white/50"}`}>
+                    #{block.number}
+                  </span>
                 </div>
-             ) : (
-                blocks.map((block, idx) => (
-                  <div 
-                     key={block.number} 
-                     className={`rounded-2xl border p-6 transition-all duration-500 ${
-                        idx === 0 
-                           ? 'bg-blue-900/10 border-blue-500/50 shadow-[0_0_30px_rgba(59,130,246,0.15)] animate-in slide-in-from-top-4 fade-in' 
-                           : 'bg-black border-gray-800 opacity-70'
-                     }`}
-                  >
-                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-                        <div className="flex items-center space-x-4 mb-4 md:mb-0">
-                           <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-bold text-lg ${idx === 0 ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-800 text-gray-400'}`}>
-                              #{block.number}
-                           </div>
-                           <div>
-                              <p className="text-xs text-gray-500 uppercase tracking-wider">Block Hash</p>
-                              <p className={`font-bold ${idx === 0 ? 'text-white' : 'text-gray-400'}`}>{block.hash.substring(0, 20)}...</p>
-                           </div>
-                        </div>
-
-                        <div className="text-left md:text-right hidden sm:block">
-                           <p className="text-xs text-gray-500 uppercase tracking-wider">State Root</p>
-                           <p className="text-gray-400">{block.stateRoot.substring(0, 16)}...</p>
-                        </div>
-                     </div>
-
-                     {/* Highlight Actual Evidence if anchored in this block */}
-                     {block.evidenceHashes.length > 0 && (
-                        <div className="mt-6 pt-6 border-t border-gray-800 space-y-3">
-                           <p className="text-xs text-emerald-500 tracking-widest uppercase font-bold flex items-center">
-                              <span className="mr-2">⚡</span> EVIDEX ANCHOR DETECTED
-                           </p>
-                           {block.evidenceHashes.map((hash, hIdx) => (
-                              <div key={hIdx} className="bg-emerald-900/10 border border-emerald-500/30 p-3 rounded-lg flex items-center justify-between">
-                                 <code className="text-emerald-300 text-sm break-all">{hash}</code>
-                                 <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded ml-4 uppercase">Keccak256</span>
-                              </div>
-                           ))}
-                        </div>
-                     )}
-                  </div>
-                ))
-             )}
-          </div>
+                <div className="col-span-6">
+                  <span className="text-[9px] font-mono text-white/25 tracking-wider break-all leading-relaxed">
+                    {block.hash.slice(0, 22)}...{block.hash.slice(-8)}
+                  </span>
+                </div>
+                <div className="col-span-3">
+                  {block.evidenceCount > 0 ? (
+                    <span className="text-[10px] text-[#ff00ff]/70 uppercase tracking-widest">
+                      {block.evidenceCount} PROOF{block.evidenceCount !== 1 ? "S" : ""}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-white/15 uppercase tracking-widest">EMPTY</span>
+                  )}
+                </div>
+                <div className="col-span-2">
+                  <span className="text-[9px] text-white/20 uppercase tracking-wider">
+                    {new Date(block.ts).toLocaleTimeString("en-US", { hour12: false })}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

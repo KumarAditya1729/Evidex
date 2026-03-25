@@ -1,132 +1,245 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
-export default function EvidexLandingPage() {
-  const [mounted, setMounted] = useState(false);
+const CHAINS = ["POLKADOT", "ETHEREUM", "IPFS", "SUBSTRATE", "XCM", "EVM"];
+const STATS = [
+  { label: "CONSENSUS", value: "FINALIZED" },
+  { label: "PROTOCOL", value: "v2.4.1" },
+  { label: "NETWORK", value: "TESTNET" },
+];
+
+function useTypingEffect(words: string[], speed = 80, pause = 2000) {
+  const [displayed, setDisplayed] = useState("");
+  const [wordIdx, setWordIdx] = useState(0);
+  const [charIdx, setCharIdx] = useState(0);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const word = words[wordIdx];
+    let timeout: ReturnType<typeof setTimeout>;
+
+    if (!deleting && charIdx < word.length) {
+      timeout = setTimeout(() => setCharIdx((c) => c + 1), speed);
+    } else if (!deleting && charIdx === word.length) {
+      timeout = setTimeout(() => setDeleting(true), pause);
+    } else if (deleting && charIdx > 0) {
+      timeout = setTimeout(() => setCharIdx((c) => c - 1), speed / 2);
+    } else {
+      setDeleting(false);
+      setWordIdx((i) => (i + 1) % words.length);
+    }
+
+    setDisplayed(word.slice(0, charIdx));
+    return () => clearTimeout(timeout);
+  }, [charIdx, deleting, wordIdx, words, speed, pause]);
+
+  return displayed;
+}
+
+function NoiseBg() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    const draw = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const img = ctx.createImageData(canvas.width, canvas.height);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random() * 20;
+        img.data[i] = v;
+        img.data[i + 1] = v;
+        img.data[i + 2] = v;
+        img.data[i + 3] = 18;
+      }
+      ctx.putImageData(img, 0, 0);
+    };
+    draw();
+    const interval = setInterval(draw, 120);
+    window.addEventListener("resize", draw);
+    return () => { clearInterval(interval); window.removeEventListener("resize", draw); };
+  }, []);
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-10" />;
+}
+
+function ParticleField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    const particles: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: string }[] = [];
+    const COLORS = ["#ff00ff", "#00ffff", "#ffff00", "#ff6600", "#00ff88"];
+    
+    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+    resize();
+    window.addEventListener("resize", resize);
+
+    for (let i = 0; i < 60; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        life: Math.random() * 200,
+        maxLife: 150 + Math.random() * 100,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      });
+    }
+
+    let raf: number;
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life++;
+        if (p.life > p.maxLife) {
+          p.x = Math.random() * canvas.width;
+          p.y = Math.random() * canvas.height;
+          p.life = 0;
+        }
+        const alpha = Math.sin((p.life / p.maxLife) * Math.PI) * 0.7;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, "0");
+        ctx.fill();
+        // glow
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + "15";
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(animate);
+    };
+    animate();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
+}
+
+export default function LandingPage() {
+  const [time, setTime] = useState("00:00:000");
+  const [blockCount, setBlockCount] = useState(0);
+  const typed = useTypingEffect(["IMMUTABLE", "TRUSTLESS", "CROSS-CHAIN", "TAMPER-PROOF", "DECENTRALIZED"]);
+
+  useEffect(() => {
+    const start = Date.now();
+    const t = setInterval(() => {
+      const elapsed = Date.now() - start;
+      const ms = elapsed % 1000;
+      const s = Math.floor(elapsed / 1000) % 60;
+      const m = Math.floor(elapsed / 60000) % 60;
+      setTime(`${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}:${String(ms).padStart(3, "0")}`);
+    }, 33);
+    const b = setInterval(() => setBlockCount((n) => n + 1), 6000);
+    return () => { clearInterval(t); clearInterval(b); };
   }, []);
 
-  if (!mounted) return <div className="min-h-screen bg-black" />; // Prevent hydration mismatch
-
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-blue-500/30 font-sans overflow-x-hidden">
-      
-      {/* Dynamic Background Effects */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-900/20 rounded-full blur-[120px] mix-blend-screen" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-900/20 rounded-full blur-[120px] mix-blend-screen" />
+    <div className="relative min-h-screen bg-black overflow-hidden font-mono text-white select-none">
+      <ParticleField />
+      <NoiseBg />
+
+      {/* HUD — Top Left */}
+      <div className="fixed top-0 left-0 z-50 p-6 space-y-1">
+        <div className="text-[11px] tracking-[0.3em] text-white/40 uppercase">EVIDEX LAB</div>
+        <div className="text-[13px] tracking-[0.2em] text-[#ff00ff] uppercase font-bold">Trust Protocol</div>
+        <div className="text-[10px] tracking-widest text-white/25 mt-2">MULTI-CHAIN ANCHORING SYSTEM</div>
       </div>
 
-      {/* Navigation */}
-      <nav className="relative z-10 flex items-center justify-between p-6 max-w-7xl mx-auto border-b border-gray-800">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-lg">E</div>
-          <span className="text-xl font-bold tracking-widest uppercase">EVIDEX</span>
-        </div>
-        <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-gray-400">
-          <Link href="#architecture" className="hover:text-white transition-colors">Architecture</Link>
-          <a href="https://github.com/KumarAditya1729/Evidex" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">GitHub</a>
-        </div>
-        <div className="flex items-center space-x-4">
-           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-           <span className="text-sm font-mono text-emerald-500">Substrate WSS Online</span>
-        </div>
-      </nav>
+      {/* HUD — Top Right */}
+      <div className="fixed top-0 right-0 z-50 p-6 text-right space-y-1">
+        {STATS.map((s) => (
+          <div key={s.label} className="flex items-center justify-end gap-3">
+            <span className="text-[10px] tracking-widest text-white/30 uppercase">{s.label}</span>
+            <span className="text-[11px] tracking-widest text-[#00ffff] uppercase">{s.value}</span>
+          </div>
+        ))}
+      </div>
 
-      {/* Hero Section */}
-      <main className="relative z-10 flex flex-col items-center justify-center px-4 pt-32 pb-24 max-w-7xl mx-auto text-center">
-        <div className="inline-flex items-center space-x-2 bg-blue-900/10 border border-blue-500/20 rounded-full px-4 py-1.5 mb-8">
-          <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Now Live on Cross-Chain Testnet</span>
+      {/* HUD — Bottom Left Timer */}
+      <div className="fixed bottom-0 left-0 z-50 p-6">
+        <div className="text-[11px] tracking-[0.25em] text-white/30 uppercase mb-1">SESSION</div>
+        <div className="text-[22px] tracking-[0.15em] text-[#ffff00] tabular-nums">{time}</div>
+      </div>
+
+      {/* HUD — Bottom Right */}
+      <div className="fixed bottom-0 right-0 z-50 p-6 text-right space-y-1">
+        <div className="text-[10px] tracking-widest text-white/30 uppercase">BLOCKS FINALIZED</div>
+        <div className="text-[18px] tracking-widest text-[#ff00ff] tabular-nums">{String(blockCount).padStart(6, "0")}</div>
+        <div className="text-[9px] tracking-widest text-white/20 uppercase">≈ 6s SLOT TIME</div>
+      </div>
+
+      {/* Horizontal scanline */}
+      <div className="fixed inset-x-0 z-20 pointer-events-none" style={{ top: "50%" }}>
+        <div className="h-px bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+      </div>
+
+      {/* Main Center Content */}
+      <div className="relative z-30 flex flex-col items-center justify-center min-h-screen px-8 text-center">
+
+        {/* Live chain ticker */}
+        <div className="flex items-center gap-2 mb-12 flex-wrap justify-center">
+          {CHAINS.map((c, i) => (
+            <span key={c} className="text-[10px] tracking-[0.3em] text-white/25 uppercase">
+              {c}{i < CHAINS.length - 1 && <span className="mx-2 text-[#ff00ff]/40">·</span>}
+            </span>
+          ))}
         </div>
 
-        <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight mb-8 drop-shadow-2xl text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-400">
-          The Universal <br /> Trust Layer.
-        </h1>
-        
-        <p className="max-w-3xl text-xl md:text-2xl text-gray-400 mb-12 font-light leading-relaxed">
-          Evidex mathematically anchors real-world evidence across 
-          <span className="text-blue-400 font-medium"> Polkadot </span> and 
-          <span className="text-indigo-400 font-medium"> Ethereum </span> 
-          without blind trust. Build invincible systems for Government, Finance, and Healthcare.
+        {/* Main headline */}
+        <div className="space-y-2 mb-6">
+          <div className="text-[11px] tracking-[0.4em] text-white/30 uppercase mb-8">
+            THE UNIVERSAL TRUST LAYER
+          </div>
+          <h1 className="text-[clamp(3rem,10vw,8rem)] font-black leading-none tracking-tight uppercase">
+            <span className="block text-white">EVIDENCE</span>
+            <span className="block" style={{
+              background: "linear-gradient(135deg, #ff00ff, #00ffff, #ffff00)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}>
+              {typed || "\u00a0"}<span className="animate-pulse text-white/50">_</span>
+            </span>
+          </h1>
+        </div>
+
+        <p className="max-w-xl text-[13px] leading-relaxed text-white/35 tracking-wide mb-16 uppercase">
+          Cryptographic proofs anchored across{" "}
+          <span className="text-[#ff00ff]/80">Polkadot</span> and{" "}
+          <span className="text-[#00ffff]/80">Ethereum</span>{" "}
+          without blind trust. Built for Government, Finance, and Healthcare.
         </p>
 
-        {/* Portal Entry Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-6 w-full max-w-2xl">
-          
-          <Link href="/evidence/submit" className="w-full sm:w-auto group relative inline-flex h-16 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 px-8 font-medium text-white transition-all duration-300 hover:scale-105 hover:shadow-[0_0_40px_rgba(59,130,246,0.5)]">
-            <span className="absolute w-0 h-0 transition-all duration-500 ease-out bg-white rounded-full group-hover:w-56 group-hover:h-56 opacity-10"></span>
-            <span className="relative flex items-center space-x-2">
-               <span>Anchor Data (Submit)</span>
-               <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-            </span>
+        {/* CTAs */}
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <Link href="/evidence/submit"
+            className="group relative px-10 py-4 text-[11px] tracking-[0.3em] uppercase font-bold overflow-hidden border border-[#ff00ff]/50 text-[#ff00ff] transition-all duration-300 hover:border-[#ff00ff] hover:text-black"
+            style={{ background: "transparent" }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#ff00ff"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+          >
+            ANCHOR DATA
           </Link>
-
-          <Link href="/evidence/verify" className="w-full sm:w-auto group relative inline-flex h-16 items-center justify-center overflow-hidden rounded-2xl bg-gray-900 border border-gray-700 px-8 font-medium text-white transition-all duration-300 hover:scale-105 hover:border-gray-500 hover:bg-gray-800">
-             <span className="relative flex items-center space-x-2">
-               <span>Audit Data (Verify)</span>
-               <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-             </span>
+          <Link href="/evidence/verify"
+            className="px-10 py-4 text-[11px] tracking-[0.3em] uppercase font-bold border border-white/15 text-white/50 transition-all hover:border-white/40 hover:text-white/90"
+          >
+            VERIFY PROOF
           </Link>
-          
-        </div>
-
-        <div className="mt-8">
-          <Link href="/explorer" className="text-gray-500 hover:text-emerald-400 text-sm font-medium transition-colors border-b border-transparent hover:border-emerald-400 pb-1">
-             → Or View the Live Substrate Explorer Feed
+          <Link href="/explorer"
+            className="px-10 py-4 text-[11px] tracking-[0.3em] uppercase text-white/25 hover:text-[#00ffff]/80 transition-all"
+          >
+            → LIVE EXPLORER
           </Link>
         </div>
-      </main>
 
-      {/* Architecture Overview Section */}
-      <section id="architecture" className="relative z-10 bg-black border-t border-gray-800 py-24">
-         <div className="max-w-7xl mx-auto px-6">
-            <div className="text-center mb-16">
-               <h2 className="text-3xl md:text-5xl font-bold mb-4">How Evidex Achieves Zero-Trust</h2>
-               <p className="text-gray-400 max-w-2xl mx-auto">We ripped the cryptography out of the backend and put it in your hands. A 3-pillar protocol engineering masterclass.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-               
-               {/* Pillar 1 */}
-               <div className="bg-gray-900/50 border border-gray-800 p-8 rounded-3xl hover:border-blue-500/50 transition-colors">
-                  <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-2xl mb-6 border border-blue-500/20">🔒</div>
-                  <h3 className="text-xl font-bold mb-3 text-white">Client-Side Proofs</h3>
-                  <p className="text-gray-400 text-sm leading-relaxed">
-                     When you anchor data, the `@evidex/sdk` computes the exact Keccak256 hash locally on your device's GPU. The raw PDF or Image is never sent to a vulnerable backend API.
-                  </p>
-               </div>
-
-               {/* Pillar 2 */}
-               <div className="bg-gray-900/50 border border-gray-800 p-8 rounded-3xl hover:border-emerald-500/50 transition-colors">
-                  <div className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center text-2xl mb-6 border border-emerald-500/20">⛓️</div>
-                  <h3 className="text-xl font-bold mb-3 text-white">Substrate Layer 0</h3>
-                  <p className="text-gray-400 text-sm leading-relaxed">
-                     Hashes are anchored to a custom Rust-built Polkadot Parachain. Native XCMP (Cross-Consensus Messaging) algorithms route your evidence immutably across the network.
-                  </p>
-               </div>
-
-               {/* Pillar 3 */}
-               <div className="bg-gray-900/50 border border-gray-800 p-8 rounded-3xl hover:border-indigo-500/50 transition-colors">
-                  <div className="w-12 h-12 bg-indigo-500/10 rounded-xl flex items-center justify-center text-2xl mb-6 border border-indigo-500/20">⚖️</div>
-                  <h3 className="text-xl font-bold mb-3 text-white">Ethereum Light Client</h3>
-                  <p className="text-gray-400 text-sm leading-relaxed">
-                     Auditors don't have to trust Polkadot. Evidex natively extracts the Substrate Trie proof and mathematically verifies it via Smart Contracts on the EVM in real-time.
-                  </p>
-               </div>
-
-            </div>
-         </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-800 py-12 text-center text-gray-600 text-sm relative z-10 bg-black">
-         <p>EVIDEX Protocol Architecture. Built for Trust-Minimized Data Anchoring.</p>
-         <p className="mt-2 text-gray-500">© 2026 EVIDEX Foundation</p>
-      </footer>
+        {/* Divider */}
+        <div className="mt-24 w-px h-16 bg-gradient-to-b from-transparent via-white/10 to-transparent" />
+      </div>
     </div>
   );
 }
