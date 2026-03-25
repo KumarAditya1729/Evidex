@@ -26,31 +26,74 @@ import type {
 export interface EvidenceRegistryInterface extends Interface {
   getFunction(
     nameOrSignature:
+      | "commitMerkleRoot"
+      | "crossChainProofs"
       | "getEvidenceByHash"
       | "getUserEvidence"
+      | "merkleRoots"
       | "registerEvidence"
+      | "trustedAnchor"
       | "verifyEvidence"
+      | "verifyEvidenceWithMerkle"
+      | "verifyFromPolkadot"
   ): FunctionFragment;
 
-  getEvent(nameOrSignatureOrTopic: "EvidenceRegistered"): EventFragment;
+  getEvent(
+    nameOrSignatureOrTopic:
+      | "CrossChainVerified"
+      | "EvidenceRegistered"
+      | "MerkleRootCommitted"
+  ): EventFragment;
 
+  encodeFunctionData(
+    functionFragment: "commitMerkleRoot",
+    values: [BytesLike, string]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "crossChainProofs",
+    values: [BytesLike]
+  ): string;
   encodeFunctionData(
     functionFragment: "getEvidenceByHash",
     values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "getUserEvidence",
-    values: [AddressLike]
+    values: [AddressLike, BigNumberish, BigNumberish]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "merkleRoots",
+    values: [BytesLike]
   ): string;
   encodeFunctionData(
     functionFragment: "registerEvidence",
     values: [BytesLike, string]
   ): string;
   encodeFunctionData(
+    functionFragment: "trustedAnchor",
+    values?: undefined
+  ): string;
+  encodeFunctionData(
     functionFragment: "verifyEvidence",
     values: [BytesLike]
   ): string;
+  encodeFunctionData(
+    functionFragment: "verifyEvidenceWithMerkle",
+    values: [BytesLike, BytesLike[], BytesLike]
+  ): string;
+  encodeFunctionData(
+    functionFragment: "verifyFromPolkadot",
+    values: [BytesLike, string]
+  ): string;
 
+  decodeFunctionResult(
+    functionFragment: "commitMerkleRoot",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "crossChainProofs",
+    data: BytesLike
+  ): Result;
   decodeFunctionResult(
     functionFragment: "getEvidenceByHash",
     data: BytesLike
@@ -60,13 +103,51 @@ export interface EvidenceRegistryInterface extends Interface {
     data: BytesLike
   ): Result;
   decodeFunctionResult(
+    functionFragment: "merkleRoots",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
     functionFragment: "registerEvidence",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "trustedAnchor",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
     functionFragment: "verifyEvidence",
     data: BytesLike
   ): Result;
+  decodeFunctionResult(
+    functionFragment: "verifyEvidenceWithMerkle",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "verifyFromPolkadot",
+    data: BytesLike
+  ): Result;
+}
+
+export namespace CrossChainVerifiedEvent {
+  export type InputTuple = [
+    hash: BytesLike,
+    polkadotTxHash: string,
+    timestamp: BigNumberish
+  ];
+  export type OutputTuple = [
+    hash: string,
+    polkadotTxHash: string,
+    timestamp: bigint
+  ];
+  export interface OutputObject {
+    hash: string;
+    polkadotTxHash: string;
+    timestamp: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
 }
 
 export namespace EvidenceRegisteredEvent {
@@ -86,6 +167,28 @@ export namespace EvidenceRegisteredEvent {
     hash: string;
     owner: string;
     ipfsCID: string;
+    timestamp: bigint;
+  }
+  export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
+  export type Filter = TypedDeferredTopicFilter<Event>;
+  export type Log = TypedEventLog<Event>;
+  export type LogDescription = TypedLogDescription<Event>;
+}
+
+export namespace MerkleRootCommittedEvent {
+  export type InputTuple = [
+    root: BytesLike,
+    polkadotTxHash: string,
+    timestamp: BigNumberish
+  ];
+  export type OutputTuple = [
+    root: string,
+    polkadotTxHash: string,
+    timestamp: bigint
+  ];
+  export interface OutputObject {
+    root: string;
+    polkadotTxHash: string;
     timestamp: bigint;
   }
   export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>;
@@ -137,6 +240,14 @@ export interface EvidenceRegistry extends BaseContract {
     event?: TCEvent
   ): Promise<this>;
 
+  commitMerkleRoot: TypedContractMethod<
+    [root: BytesLike, polkadotTxHash: string],
+    [void],
+    "nonpayable"
+  >;
+
+  crossChainProofs: TypedContractMethod<[arg0: BytesLike], [string], "view">;
+
   getEvidenceByHash: TypedContractMethod<
     [hash: BytesLike],
     [
@@ -150,10 +261,12 @@ export interface EvidenceRegistry extends BaseContract {
   >;
 
   getUserEvidence: TypedContractMethod<
-    [wallet: AddressLike],
+    [wallet: AddressLike, offset: BigNumberish, limit: BigNumberish],
     [string[]],
     "view"
   >;
+
+  merkleRoots: TypedContractMethod<[arg0: BytesLike], [string], "view">;
 
   registerEvidence: TypedContractMethod<
     [hash: BytesLike, ipfsCID: string],
@@ -161,23 +274,48 @@ export interface EvidenceRegistry extends BaseContract {
     "nonpayable"
   >;
 
+  trustedAnchor: TypedContractMethod<[], [string], "view">;
+
   verifyEvidence: TypedContractMethod<
     [hash: BytesLike],
     [
-      [boolean, bigint, string, string] & {
+      [boolean, bigint, string, string, string] & {
         exists: boolean;
         timestamp: bigint;
         owner: string;
         ipfsCID: string;
+        polkadotProof: string;
       }
     ],
     "view"
+  >;
+
+  verifyEvidenceWithMerkle: TypedContractMethod<
+    [hash: BytesLike, proof: BytesLike[], root: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+
+  verifyFromPolkadot: TypedContractMethod<
+    [hash: BytesLike, polkadotTxHash: string],
+    [void],
+    "nonpayable"
   >;
 
   getFunction<T extends ContractMethod = ContractMethod>(
     key: string | FunctionFragment
   ): T;
 
+  getFunction(
+    nameOrSignature: "commitMerkleRoot"
+  ): TypedContractMethod<
+    [root: BytesLike, polkadotTxHash: string],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "crossChainProofs"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "getEvidenceByHash"
   ): TypedContractMethod<
@@ -193,7 +331,14 @@ export interface EvidenceRegistry extends BaseContract {
   >;
   getFunction(
     nameOrSignature: "getUserEvidence"
-  ): TypedContractMethod<[wallet: AddressLike], [string[]], "view">;
+  ): TypedContractMethod<
+    [wallet: AddressLike, offset: BigNumberish, limit: BigNumberish],
+    [string[]],
+    "view"
+  >;
+  getFunction(
+    nameOrSignature: "merkleRoots"
+  ): TypedContractMethod<[arg0: BytesLike], [string], "view">;
   getFunction(
     nameOrSignature: "registerEvidence"
   ): TypedContractMethod<
@@ -202,20 +347,45 @@ export interface EvidenceRegistry extends BaseContract {
     "nonpayable"
   >;
   getFunction(
+    nameOrSignature: "trustedAnchor"
+  ): TypedContractMethod<[], [string], "view">;
+  getFunction(
     nameOrSignature: "verifyEvidence"
   ): TypedContractMethod<
     [hash: BytesLike],
     [
-      [boolean, bigint, string, string] & {
+      [boolean, bigint, string, string, string] & {
         exists: boolean;
         timestamp: bigint;
         owner: string;
         ipfsCID: string;
+        polkadotProof: string;
       }
     ],
     "view"
   >;
+  getFunction(
+    nameOrSignature: "verifyEvidenceWithMerkle"
+  ): TypedContractMethod<
+    [hash: BytesLike, proof: BytesLike[], root: BytesLike],
+    [void],
+    "nonpayable"
+  >;
+  getFunction(
+    nameOrSignature: "verifyFromPolkadot"
+  ): TypedContractMethod<
+    [hash: BytesLike, polkadotTxHash: string],
+    [void],
+    "nonpayable"
+  >;
 
+  getEvent(
+    key: "CrossChainVerified"
+  ): TypedContractEvent<
+    CrossChainVerifiedEvent.InputTuple,
+    CrossChainVerifiedEvent.OutputTuple,
+    CrossChainVerifiedEvent.OutputObject
+  >;
   getEvent(
     key: "EvidenceRegistered"
   ): TypedContractEvent<
@@ -223,8 +393,26 @@ export interface EvidenceRegistry extends BaseContract {
     EvidenceRegisteredEvent.OutputTuple,
     EvidenceRegisteredEvent.OutputObject
   >;
+  getEvent(
+    key: "MerkleRootCommitted"
+  ): TypedContractEvent<
+    MerkleRootCommittedEvent.InputTuple,
+    MerkleRootCommittedEvent.OutputTuple,
+    MerkleRootCommittedEvent.OutputObject
+  >;
 
   filters: {
+    "CrossChainVerified(bytes32,string,uint256)": TypedContractEvent<
+      CrossChainVerifiedEvent.InputTuple,
+      CrossChainVerifiedEvent.OutputTuple,
+      CrossChainVerifiedEvent.OutputObject
+    >;
+    CrossChainVerified: TypedContractEvent<
+      CrossChainVerifiedEvent.InputTuple,
+      CrossChainVerifiedEvent.OutputTuple,
+      CrossChainVerifiedEvent.OutputObject
+    >;
+
     "EvidenceRegistered(bytes32,address,string,uint256)": TypedContractEvent<
       EvidenceRegisteredEvent.InputTuple,
       EvidenceRegisteredEvent.OutputTuple,
@@ -234,6 +422,17 @@ export interface EvidenceRegistry extends BaseContract {
       EvidenceRegisteredEvent.InputTuple,
       EvidenceRegisteredEvent.OutputTuple,
       EvidenceRegisteredEvent.OutputObject
+    >;
+
+    "MerkleRootCommitted(bytes32,string,uint256)": TypedContractEvent<
+      MerkleRootCommittedEvent.InputTuple,
+      MerkleRootCommittedEvent.OutputTuple,
+      MerkleRootCommittedEvent.OutputObject
+    >;
+    MerkleRootCommitted: TypedContractEvent<
+      MerkleRootCommittedEvent.InputTuple,
+      MerkleRootCommittedEvent.OutputTuple,
+      MerkleRootCommittedEvent.OutputObject
     >;
   };
 }

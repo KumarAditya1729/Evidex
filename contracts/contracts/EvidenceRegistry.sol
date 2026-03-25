@@ -1,24 +1,36 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "./utils/MerkleProof.sol";
+
+/**
+ * @title EvidenceRegistry
+ * @dev Manages the registration and verification of digital evidence.
+ * Supports primary anchoring and secondary cross-chain Merkle Proof verification.
+ */
 contract EvidenceRegistry {
     struct EvidenceRecord {
         address owner;
-        uint256 timestamp;  // was uint64 — now matches event emit type
+        uint256 timestamp;
         string ipfsCID;
         bool exists;
     }
 
     error EvidenceAlreadyExists(bytes32 hash);
     error EvidenceNotFound(bytes32 hash);
+    error InvalidMerkleProof();
 
+    // Primary Evidence mapping
     mapping(bytes32 => EvidenceRecord) private evidenceByHash;
     mapping(address => bytes32[]) private evidenceByUser;
 
-    // Cross-Chain tracking: Evidence Hash => Polkadot TxHash
+    // Cross-Chain tracking (Merkle Roots)
+    // Maps Merkle Root => Polkadot TxHash (the extrinsic that anchored the batch)
+    mapping(bytes32 => string) public merkleRoots;
+    // Maps Evidence Hash => Polkadot TxHash (for backward compatibility / direct relay tracking)
     mapping(bytes32 => string) public crossChainProofs;
 
-    // CQ-6: Secure access control for evidence registration
+    // Secure access control for evidence registration
     address public immutable trustedAnchor;
 
     event EvidenceRegistered(
@@ -28,15 +40,17 @@ contract EvidenceRegistry {
         uint256 timestamp
     );
 
+    event MerkleRootCommitted(
+        bytes32 indexed root,
+        string polkadotTxHash,
+        uint256 timestamp
+    );
+
     event CrossChainVerified(
         bytes32 indexed hash,
         string polkadotTxHash,
         uint256 timestamp
     );
-
-    constructor(address _trustedAnchor) {
-        trustedAnchor = _trustedAnchor;
-    }
 
     modifier onlyAnchor() {
         if (msg.sender != trustedAnchor) revert Unauthorized();
@@ -45,6 +59,13 @@ contract EvidenceRegistry {
 
     error Unauthorized();
 
+    constructor(address _trustedAnchor) {
+        trustedAnchor = _trustedAnchor;
+    }
+
+    /**
+     * @dev Register evidence directly on this chain (Primary Anchoring)
+     */
     function registerEvidence(bytes32 hash, string calldata ipfsCID) external onlyAnchor {
         if (evidenceByHash[hash].exists) {
             revert EvidenceAlreadyExists(hash);
@@ -52,7 +73,7 @@ contract EvidenceRegistry {
 
         evidenceByHash[hash] = EvidenceRecord({
             owner: msg.sender,
-            timestamp: block.timestamp,  // uint256 — no cast needed
+            timestamp: block.timestamp,
             ipfsCID: ipfsCID,
             exists: true
         });
@@ -63,25 +84,48 @@ contract EvidenceRegistry {
     }
 
     /**
-     * @dev Cross-Chain Verification Layer.
-     * The trusted Oracle Relayer submits proofs that the evidence was anchored on the Primary Chain (Polkadot).
+     * @dev Phase 2: Commits a Merkle Root representing a batch of Polkadot evidence hashes.
+     * The `polkadotTxHash` is the transaction on Polkadot that contains this batched data.
+     */
+    function commitMerkleRoot(bytes32 root, string calldata polkadotTxHash) external onlyAnchor {
+        merkleRoots[root] = polkadotTxHash;
+        emit MerkleRootCommitted(root, polkadotTxHash, block.timestamp);
+    }
+
+    /**
+     * @dev Cryptographically verify an evidence hash using a committed Merkle Proof.
+     * If valid, it records the verification so `verifyEvidence` can return the cross-chain proof info.
+     * This can be called by ANYONE (fully decentralized verification).
+     */
+    function verifyEvidenceWithMerkle(bytes32 hash, bytes32[] calldata proof, bytes32 root) external {
+        string memory polkadotTx = merkleRoots[root];
+        require(bytes(polkadotTx).length > 0, "Merkle Root not found");
+
+        // The OpenZeppelin MerkleProof requires leaves to be keccak256
+        // Alternatively, if the backend uses the raw hash bytes, we can hash it.
+        // Assuming the `hash` itself is the leaf node.
+        bytes32 leaf = hash;
+        
+        bool isValid = MerkleProof.verify(proof, root, leaf);
+        if (!isValid) revert InvalidMerkleProof();
+
+        // Mark it as cross-chain verified if not already
+        if (bytes(crossChainProofs[hash]).length == 0) {
+            crossChainProofs[hash] = polkadotTx;
+            emit CrossChainVerified(hash, polkadotTx, block.timestamp);
+        }
+    }
+
+    /**
+     * @dev Legacy / Direct Relay Verification (Phase 1)
      */
     function verifyFromPolkadot(bytes32 hash, string calldata polkadotTxHash) external onlyAnchor {
         if (evidenceByHash[hash].exists) {
             revert EvidenceAlreadyExists(hash);
         }
-
-        // Store a lightweight verified record. Owner is tracked on Primary Chain.
-        evidenceByHash[hash] = EvidenceRecord({
-            owner: address(0), 
-            timestamp: block.timestamp,
-            ipfsCID: "", // CID is tracked on Primary Chain
-            exists: true
-        });
-
-        // Store the cross-chain proof reference
+        
+        // In Phase 2, this is kept for compatibility but we prefer verifyEvidenceWithMerkle
         crossChainProofs[hash] = polkadotTxHash;
-
         emit CrossChainVerified(hash, polkadotTxHash, block.timestamp);
     }
 
@@ -91,11 +135,18 @@ contract EvidenceRegistry {
         returns (bool exists, uint256 timestamp, address owner, string memory ipfsCID, string memory polkadotProof)
     {
         EvidenceRecord memory record = evidenceByHash[hash];
-        if (!record.exists) {
+        if (!record.exists && bytes(crossChainProofs[hash]).length == 0) {
             return (false, 0, address(0), "", "");
         }
 
-        return (true, record.timestamp, record.owner, record.ipfsCID, crossChainProofs[hash]);
+        // Return the primary record if it exists, otherwise it's just a cross-chain proof
+        return (
+            record.exists || bytes(crossChainProofs[hash]).length > 0,
+            record.timestamp,
+            record.owner,
+            record.ipfsCID,
+            crossChainProofs[hash]
+        );
     }
 
     function getUserEvidence(

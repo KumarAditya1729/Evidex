@@ -1,0 +1,32 @@
+[relaychain]
+default_command = "polkadot"
+default_args = [ "-lparachain=debug" ]
+chain = "rococo-local"
+
+  [[relaychain.nodes]]
+  name = "alice"
+  validator = true
+
+  [[relaychain.nodes]]
+  name = "bob"
+  validator = true
+
+[[parachains]]
+id = 2000
+cumulus_based = true
+
+  # The Primary EVIDEX Anchoring Parachain
+  [[parachains.collators]]
+  name = "evidex-collator-1"
+  command = "./target/release/arkashri-node"
+  args = ["-lparachain=debug,xcm=trace"]
+
+[[parachains]]
+id = 2001
+cumulus_based = true
+
+  # The Sister Verification Parachain (Receives Evidence Hashes natively via XCMP)
+  [[parachains.collators]]
+  name = "evidex-verifier-collator"
+  command = "./target/release/arkashri-node"
+  args = ["-lparachain=debug,xcm=trace"]

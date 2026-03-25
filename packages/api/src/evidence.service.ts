@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { createBlockchainServiceFromEnv } from "@evidex/blockchain";
+import { createBlockchainServiceFromEnv, MerkleTree } from "@evidex/blockchain";
 import {
   createEvidenceRecord,
   findEvidenceByHash,
   getOrCreateUser,
   Chain,
+  listEvidenceByUser,
   type Prisma
 } from "@evidex/database";
 import { uploadBufferToIPFS, uploadFileStreamToIPFS } from "@evidex/storage";
@@ -91,25 +92,33 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
     crossChainProof?: string;
   }> = [];
 
-  // 2. ORACLE RELAYER: Cross-Chain Verification on Secondary Chains
-  // Relays the Polkadot proof to the user's requested network (e.g. Ethereum)
+  // 2. ORACLE RELAYER: Cross-Chain Verification on Secondary Chains (Phase 2 - Merkle Proofs)
+  // We fetch the last 3 evidences to batch them into a Merkle Tree with the new upload
+  // to demonstrate true cryptographic batched proving.
+  const recentEvidences = await listEvidenceByUser(user.walletAddress, { limit: 3 });
+  const batchHashes = recentEvidences.map(e => e.sha256Hash).filter(h => h !== hash);
+  batchHashes.push(hash); // The new one is guaranteed to be in the tree
+  
+  const tree = new MerkleTree(batchHashes);
+  const merkleRoot = tree.getRoot();
+  const hexProof = tree.getProof(hash);
+
   const configuredChains = blockchainService.getSupportedChains();
   const targetRelayChains = new Set<string>();
   
-  // By default, if Ethereum is configured, we relay to it to demonstrate cross-chain!
   if (configuredChains.includes("ethereum-sepolia")) {
     targetRelayChains.add("ethereum-sepolia");
   }
-  // If user explicitly picked an active secondary EVM chain, ensure it's relayed
   if (chain !== "polkadot" && configuredChains.includes(chain as any)) {
     targetRelayChains.add(chain);
   }
 
   for (const relayChain of targetRelayChains) {
     try {
-      const relayReceipt = await blockchainService.verifyFromPolkadot(
+      // PHASE 2: Submit the Merkle Root instead of individual hashes
+      const relayReceipt = await blockchainService.commitMerkleRoot(
         relayChain as any,
-        hash,
+        merkleRoot,
         primary.txHash
       );
       
@@ -117,13 +126,17 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
       additionalAnchors.push({
         chain: toPrismaChain(relayChain),
         txHash: relayReceipt.txHash,
-        explorerUrl: relayReceipt.explorerUrl, // e.g. Etherscan URL
+        explorerUrl: relayReceipt.explorerUrl, 
         timestamp: relayReceipt.timestamp,
-        verifiedChain: "POLKADOT",            // The chain we are verifying for
-        crossChainProof: primary.txHash       // The payload sent to the smart contract
+        verifiedChain: "POLKADOT",            
+        // Store the proof mathematically so the frontend can verify it
+        crossChainProof: JSON.stringify({
+          root: merkleRoot,
+          proof: hexProof
+        })
       });
     } catch (error) {
-      console.warn(`[CROSS-CHAIN RELAYER] Failed to relay proof to ${relayChain}:`, error);
+      console.warn(`[CROSS-CHAIN RELAYER] Failed to relay Merkle Root to ${relayChain}:`, error);
       failures.push({ 
         chain: relayChain, 
         error: error instanceof Error ? error.message : String(error) 

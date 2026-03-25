@@ -50,8 +50,25 @@ export class EvmEvidenceAdapter implements BlockchainAdapter {
   }
 
   /**
-   * Cross-Chain Oracle Method
-   * Submits a confirmed Polkadot TxHash as cryptographic proof to the EVM contract.
+   * Phase 2 Cross-Chain Oracle Method
+   * Submits a Merkle Root of Polkadot evidence hashes to the EVM contract.
+   */
+  async commitMerkleRoot(rootHex: string, polkadotTxHash: string): Promise<AnchorReceipt> {
+    const root = normalizeHash(rootHex);
+    const tx = await this.contract.commitMerkleRoot(root, polkadotTxHash);
+    const receipt = (await tx.wait()) as TransactionReceipt;
+
+    return {
+      chain: this.chain,
+      txHash: tx.hash,
+      timestamp: Math.floor(Date.now() / 1000),
+      blockNumber: receipt.blockNumber,
+      explorerUrl: `${this.explorerBaseUrl}${tx.hash}`
+    };
+  }
+
+  /**
+   * Legacy Array-based Cross-Chain Verifier (Phase 1)
    */
   async verifyFromPolkadot(hashHex: string, polkadotTxHash: string): Promise<AnchorReceipt> {
     const hash = normalizeHash(hashHex);

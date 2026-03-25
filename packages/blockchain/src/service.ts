@@ -76,8 +76,23 @@ export class BlockchainService {
   }
 
   /**
-   * Oracle Relayer Method
-   * Anchors a Polkadot TxHash to an EVM verification contract.
+   * Oracle Relayer Method (Phase 2)
+   * Commits a Merkle Root of evidence hashes to an EVM contract.
+   */
+  async commitMerkleRoot(
+    targetChain: SupportedChain,
+    rootHex: string,
+    polkadotTxHash: string
+  ): Promise<AnchorReceipt> {
+    const adapter = this.getAdapter(targetChain);
+    if (!("commitMerkleRoot" in adapter)) {
+      throw new Error(`Chain adapter ${targetChain} does not support Merkle Root commitments.`);
+    }
+    return (adapter as any).commitMerkleRoot(rootHex, polkadotTxHash);
+  }
+
+  /**
+   * Oracle Relayer Method (Legacy Phase 1)
    */
   async verifyFromPolkadot(
     targetChain: SupportedChain,

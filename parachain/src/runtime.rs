@@ -234,6 +234,52 @@ pub type PriceForParentDelivery = polkadot_runtime_common::xcm_sender::PriceForP
     Runtime,
 >;
 
+/// EVIDEX: Phase 7 - Native XCMP Router Configuration
+/// This defines exactly how cross-chain messages are routed out of the parachain natively.
+pub type XcmRouter = (
+    // Only allow native routing
+    cumulus_primitives_utility::ParentAsUmp<ParachainSystem, PolkadotXcm, PriceForParentDelivery>,
+    cumulus_pallet_xcmp_queue::router::XcmpRouter<XcmpQueue>,
+);
+
+pub struct XcmConfig;
+impl xcm_executor::Config for XcmConfig {
+    type RuntimeCall = RuntimeCall;
+    type XcmSender = XcmRouter;
+    // We only need basic message passing, no asset transacting for Evidence Hashes
+    type AssetTransactor = (); 
+    type OriginConverter = xcm_builder::SovereignSignedViaLocation<
+        xcm_builder::LocationConversion<AccountId>,
+        RuntimeOrigin,
+    >;
+    type IsReserve = ();
+    type IsTeleporter = ();
+    type UniversalLocation = UniversalLocation;
+    type Barrier = xcm_builder::AllowUnpaidExecutionFrom<xcm_builder::Everything>;
+    type Weigher = xcm_builder::FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
+    type Trader = xcm_builder::UsingComponents<
+        WeightToFee,
+        RelayLocation,
+        AccountId,
+        Balances,
+        (),
+    >;
+    type ResponseHandler = PolkadotXcm;
+    type AssetTrap = PolkadotXcm;
+    type AssetClaims = PolkadotXcm;
+    type SubscriptionService = PolkadotXcm;
+    type PalletInstancesInfo = AllPalletsWithSystem;
+    type MaxAssetsIntoHolding = ConstU32<64>;
+    type AssetLocker = ();
+    type AssetExchanger = ();
+    type FeeManager = ();
+    type MessageExporter = ();
+    type UniversalAliases = xcm_builder::Nothing;
+    type CallDispatcher = RuntimeCall;
+    type SafeCallFilter = xcm_builder::Everything;
+    type Aliasers = xcm_builder::Nothing;
+}
+
 impl cumulus_pallet_xcmp_queue::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type XcmExecutor = XcmExecutor<XcmConfig>;
@@ -273,6 +319,7 @@ impl pallet_evidence::Config for Runtime {
     type SubmissionFee = EvidenceSubmissionFee;
     type Currency = Balances;
     type AdminKey = ArkashriAdmin;
+    type XcmSender = XcmRouter; // Inject XcmSender!
 }
 
 impl pallet_sudo::Config for Runtime {
