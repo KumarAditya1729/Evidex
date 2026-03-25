@@ -15,6 +15,9 @@ contract EvidenceRegistry {
     mapping(bytes32 => EvidenceRecord) private evidenceByHash;
     mapping(address => bytes32[]) private evidenceByUser;
 
+    // Cross-Chain tracking: Evidence Hash => Polkadot TxHash
+    mapping(bytes32 => string) public crossChainProofs;
+
     // CQ-6: Secure access control for evidence registration
     address public immutable trustedAnchor;
 
@@ -22,6 +25,12 @@ contract EvidenceRegistry {
         bytes32 indexed hash,
         address indexed owner,
         string ipfsCID,
+        uint256 timestamp
+    );
+
+    event CrossChainVerified(
+        bytes32 indexed hash,
+        string polkadotTxHash,
         uint256 timestamp
     );
 
@@ -53,17 +62,40 @@ contract EvidenceRegistry {
         emit EvidenceRegistered(hash, msg.sender, ipfsCID, block.timestamp);
     }
 
+    /**
+     * @dev Cross-Chain Verification Layer.
+     * The trusted Oracle Relayer submits proofs that the evidence was anchored on the Primary Chain (Polkadot).
+     */
+    function verifyFromPolkadot(bytes32 hash, string calldata polkadotTxHash) external onlyAnchor {
+        if (evidenceByHash[hash].exists) {
+            revert EvidenceAlreadyExists(hash);
+        }
+
+        // Store a lightweight verified record. Owner is tracked on Primary Chain.
+        evidenceByHash[hash] = EvidenceRecord({
+            owner: address(0), 
+            timestamp: block.timestamp,
+            ipfsCID: "", // CID is tracked on Primary Chain
+            exists: true
+        });
+
+        // Store the cross-chain proof reference
+        crossChainProofs[hash] = polkadotTxHash;
+
+        emit CrossChainVerified(hash, polkadotTxHash, block.timestamp);
+    }
+
     function verifyEvidence(bytes32 hash)
         external
         view
-        returns (bool exists, uint256 timestamp, address owner, string memory ipfsCID)
+        returns (bool exists, uint256 timestamp, address owner, string memory ipfsCID, string memory polkadotProof)
     {
         EvidenceRecord memory record = evidenceByHash[hash];
         if (!record.exists) {
-            return (false, 0, address(0), "");
+            return (false, 0, address(0), "", "");
         }
 
-        return (true, record.timestamp, record.owner, record.ipfsCID);
+        return (true, record.timestamp, record.owner, record.ipfsCID, crossChainProofs[hash]);
     }
 
     function getUserEvidence(

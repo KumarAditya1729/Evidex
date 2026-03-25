@@ -80,6 +80,7 @@ export interface VerificationResult {
   timestamp?: number;
   ipfsCID?: string;
   txHash?: string;
+  polkadotProof?: string;
 }
 
 export interface AdapterUserEvidence {

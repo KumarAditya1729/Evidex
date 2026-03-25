@@ -49,9 +49,27 @@ export class EvmEvidenceAdapter implements BlockchainAdapter {
     };
   }
 
+  /**
+   * Cross-Chain Oracle Method
+   * Submits a confirmed Polkadot TxHash as cryptographic proof to the EVM contract.
+   */
+  async verifyFromPolkadot(hashHex: string, polkadotTxHash: string): Promise<AnchorReceipt> {
+    const hash = normalizeHash(hashHex);
+    const tx = await this.contract.verifyFromPolkadot(hash, polkadotTxHash);
+    const receipt = (await tx.wait()) as TransactionReceipt;
+
+    return {
+      chain: this.chain,
+      txHash: tx.hash,
+      timestamp: Math.floor(Date.now() / 1000),
+      blockNumber: receipt.blockNumber,
+      explorerUrl: `${this.explorerBaseUrl}${tx.hash}`
+    };
+  }
+
   async verifyEvidence(payload: VerifyPayload): Promise<VerificationResult> {
     const hash = normalizeHash(payload.hashHex);
-    const [exists, timestamp, owner, ipfsCID] = await this.contract.verifyEvidence(hash);
+    const [exists, timestamp, owner, ipfsCID, polkadotProof] = await this.contract.verifyEvidence(hash);
 
     if (!exists) {
       return {
@@ -65,7 +83,8 @@ export class EvmEvidenceAdapter implements BlockchainAdapter {
       exists,
       timestamp: Number(timestamp),
       owner,
-      ipfsCID
+      ipfsCID,
+      polkadotProof
     };
   }
 

@@ -75,6 +75,24 @@ export class BlockchainService {
     return { successes, failures };
   }
 
+  /**
+   * Oracle Relayer Method
+   * Anchors a Polkadot TxHash to an EVM verification contract.
+   */
+  async verifyFromPolkadot(
+    targetChain: SupportedChain,
+    hashHex: string,
+    polkadotTxHash: string
+  ): Promise<AnchorReceipt> {
+    const adapter = this.getAdapter(targetChain);
+    // TypeScript safety: we know this method exists on EVM adapters, 
+    // but we have to cast since BlockchainAdapter (base) doesn't enforce it yet.
+    if (!("verifyFromPolkadot" in adapter)) {
+      throw new Error(`Chain adapter ${targetChain} does not support cross-chain verification.`);
+    }
+    return (adapter as any).verifyFromPolkadot(hashHex, polkadotTxHash);
+  }
+
   async verifyEvidence(chain: SupportedChain, payload: VerifyPayload): Promise<VerificationResult> {
     const adapter = this.getAdapter(chain);
     return adapter.verifyEvidence(payload);

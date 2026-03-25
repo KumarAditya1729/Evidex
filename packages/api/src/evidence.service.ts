@@ -4,6 +4,7 @@ import {
   createEvidenceRecord,
   findEvidenceByHash,
   getOrCreateUser,
+  Chain,
   type Prisma
 } from "@evidex/database";
 import { uploadBufferToIPFS, uploadFileStreamToIPFS } from "@evidex/storage";
@@ -64,37 +65,71 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
 
   const blockchainService = await createBlockchainServiceFromEnv();
 
-  // ─── Multi-Chain Parallel Anchoring ───────────────────────────────────────
-  const { successes, failures } = await blockchainService.anchorEvidenceOnAllChains({
-    hashHex: hash,
-    ipfsCID: ipfsResult.cid,
-    walletAddress: user.walletAddress
-  });
-
-  if (failures.length > 0) {
-    console.warn(
-      "[EVIDEX] Some chains failed to anchor:",
-      failures.map(f => `${f.chain}: ${f.error}`).join(", ")
-    );
+  // ─── True Cross-Chain Relayer Sequence ──────────────────────────────────────
+  
+  // 1. PRIMARY ANCHOR: Always anchor to Polkadot (the source of truth)
+  let primary;
+  try {
+    primary = await blockchainService.anchorEvidence("polkadot", {
+      hashHex: hash,
+      ipfsCID: ipfsResult.cid,
+      walletAddress: user.walletAddress
+    });
+  } catch (error) {
+    throw new Error(`CRITICAL FAILURE: Primary Polkadot anchoring failed. ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  if (successes.length === 0) {
-    throw new Error(
-      `CRITICAL FAILURE: Anchoring failed on all configured chains. Errors: ${failures.map(f => `${f.chain}: ${f.error}`).join("; ")}`
-    );
+  const primaryPrismaChain = toPrismaChain("polkadot");
+  const successes = [ { chain: "polkadot", receipt: primary } ];
+  const failures: { chain: string; error: string }[] = [];
+  const additionalAnchors: Array<{
+    chain: Chain;
+    txHash: string;
+    explorerUrl?: string;
+    timestamp: number;
+    verifiedChain?: string;
+    crossChainProof?: string;
+  }> = [];
+
+  // 2. ORACLE RELAYER: Cross-Chain Verification on Secondary Chains
+  // Relays the Polkadot proof to the user's requested network (e.g. Ethereum)
+  const configuredChains = blockchainService.getSupportedChains();
+  const targetRelayChains = new Set<string>();
+  
+  // By default, if Ethereum is configured, we relay to it to demonstrate cross-chain!
+  if (configuredChains.includes("ethereum-sepolia")) {
+    targetRelayChains.add("ethereum-sepolia");
+  }
+  // If user explicitly picked an active secondary EVM chain, ensure it's relayed
+  if (chain !== "polkadot" && configuredChains.includes(chain as any)) {
+    targetRelayChains.add(chain);
   }
 
-  // Primary anchor = first success (prefer Polkadot if it's first)
-  const primary = successes[0];
-  const primaryPrismaChain = toPrismaChain(primary.chain);
-
-  // Additional anchors = remaining successes
-  const additionalAnchors = successes.slice(1).map(s => ({
-    chain: toPrismaChain(s.chain),
-    txHash: s.receipt.txHash,
-    explorerUrl: s.receipt.explorerUrl,
-    timestamp: s.receipt.timestamp
-  }));
+  for (const relayChain of targetRelayChains) {
+    try {
+      const relayReceipt = await blockchainService.verifyFromPolkadot(
+        relayChain as any,
+        hash,
+        primary.txHash
+      );
+      
+      successes.push({ chain: relayChain, receipt: relayReceipt });
+      additionalAnchors.push({
+        chain: toPrismaChain(relayChain),
+        txHash: relayReceipt.txHash,
+        explorerUrl: relayReceipt.explorerUrl, // e.g. Etherscan URL
+        timestamp: relayReceipt.timestamp,
+        verifiedChain: "POLKADOT",            // The chain we are verifying for
+        crossChainProof: primary.txHash       // The payload sent to the smart contract
+      });
+    } catch (error) {
+      console.warn(`[CROSS-CHAIN RELAYER] Failed to relay proof to ${relayChain}:`, error);
+      failures.push({ 
+        chain: relayChain, 
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
   // ──────────────────────────────────────────────────────────────────────────
 
   const evidence = await createEvidenceRecord({
@@ -105,9 +140,9 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
     sha256Hash: hash,
     ipfsCID: ipfsResult.cid,
     chain: primaryPrismaChain,
-    txHash: primary.receipt.txHash,
-    chainTimestamp: primary.receipt.timestamp,
-    explorerUrl: primary.receipt.explorerUrl,
+    txHash: primary.txHash,
+    chainTimestamp: primary.timestamp,
+    explorerUrl: primary.explorerUrl,
     additionalAnchors,
     metadata: {
       ...((input.metadata ?? {}) as any),
@@ -121,8 +156,8 @@ export async function processEvidenceUpload(rawInput: z.input<typeof evidenceUpl
     type: "evidence.anchored",
     evidenceId: evidence.id,
     walletAddress: user.walletAddress,
-    chain: primary.chain as any,
-    txHash: primary.receipt.txHash,
+    chain: "polkadot" as any,
+    txHash: primary.txHash,
     hash,
     createdAt: new Date().toISOString()
   });

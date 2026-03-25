@@ -68,10 +68,12 @@ model Anchor {
   id          String   @id @default(cuid())
   evidenceId  String
   chain       Chain
-  txHash      String
-  explorerUrl String?
-  anchoredAt  DateTime
-  createdAt   DateTime @default(now())
+  txHash          String
+  explorerUrl     String?
+  anchoredAt      DateTime
+  createdAt       DateTime @default(now())
+  verifiedChain   String?  // Optional: The chain this anchor is verifying (e.g. "polkadot")
+  crossChainProof String?  // Optional: The primary chain TxHash used as the proof payload
   evidence    Evidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
 
   @@unique([evidenceId, chain])

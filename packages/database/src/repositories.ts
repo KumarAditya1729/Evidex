@@ -97,6 +97,8 @@ export async function createEvidenceRecord(input: {
     txHash: string;
     explorerUrl?: string;
     timestamp: number;
+    verifiedChain?: string;
+    crossChainProof?: string;
   }>;
 }) {
   const primaryAnchorAt = new Date(input.chainTimestamp * 1000);
@@ -106,8 +108,10 @@ export async function createEvidenceRecord(input: {
       chain: a.chain,
       txHash: a.txHash,
       anchoredAt: new Date(a.timestamp * 1000),
-      explorerUrl: a.explorerUrl
-    }))
+      explorerUrl: a.explorerUrl,
+      verifiedChain: a.verifiedChain,
+      crossChainProof: a.crossChainProof
+    })) as any[]
   ];
 
   return prisma.evidence.create({
