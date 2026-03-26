@@ -99,7 +99,7 @@ export class EvidexLightClientRelayer {
       ? this.api!.registry.createType('Hash', blockHashStr)
       : await this.api!.rpc.chain.getFinalizedHead();
 
-    const header = await this.api!.rpc.chain.getHeader(blockHash);
+    const header = await this.api!.rpc.chain.getHeader(blockHash.toHex());
     const blockNumber = header.number.toNumber();
 
     // 1. Generate Substrate Storage Key (e.g., retrieving the evidence registry Pallet slot)
@@ -109,7 +109,7 @@ export class EvidexLightClientRelayer {
     console.log("🔎 Extracting Substrate Trie Proof...");
     
     // 2. Extract the mathematically undeniable Merkle / Trie proof from Substrate RPC
-    const proofResponse = await this.api!.rpc.state.getReadProof([storageKey], blockHash);
+    const proofResponse = await this.api!.rpc.state.getReadProof([storageKey], blockHash.toHex());
     
     // Format the proof array as bytes32 explicitly for the EVM boundary
     const merkleProofNodes = proofResponse.proof.map((node) => node.toHex());
